@@ -1,4 +1,4 @@
-local ygopro_config=function(static_core)
+﻿local ygopro_config=function(static_core)
 	kind "WindowedApp"
 	cppdialect "C++17"
 	rtti "Off"
@@ -247,11 +247,23 @@ local ygopro_config=function(static_core)
 				links { "zlibd" }
 		end
 
+  -- VCPKG VS LINK BLOCK
+  filter { "system:windows", "action:vs*", "configurations:Debug" }
+      if _OPTIONS["vcpkg-root"] then
+          links { "sqlite3", "eventd", "event_cored", "event_extrad", "git2", "fmtd", "libcurl-d", "freetyped", "libpng16d", "bz2d", "zsd", "jpeg", "turbojpeg" }
+      end
+
+  filter { "system:windows", "action:vs*", "configurations:Release" }
+      if _OPTIONS["vcpkg-root"] then
+          links { "sqlite3", "event", "git2", "fmt", "libcurl", "freetype", "libpng16", "bz2", "zs", "jpeg", "turbojpeg" }
+      end
+  -- END VCPKG VS LINK BLOCK
+
 	filter "system:not windows"
 		links { "pthread" }
 
 	filter "system:windows"
-		links { "wbemuuid", "opengl32", "ws2_32", "winmm", "gdi32", "kernel32", "user32", "imm32", "wldap32", "crypt32", "advapi32", "rpcrt4", "ole32", "oleaut32", "uuid", "winhttp" }
+		links { "wbemuuid", "opengl32", "ws2_32", "winmm", "gdi32", "kernel32", "user32", "imm32", "wldap32", "crypt32", "bcrypt", "advapi32", "rpcrt4", "ole32", "oleaut32", "uuid", "winhttp" }
 		if not _OPTIONS["oldwindows"] then
 			links "iphlpapi"
 		end

@@ -1,0 +1,23 @@
+warning: in the working copy of 'gframe/single_mode.cpp', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/gframe/single_mode.cpp b/gframe/single_mode.cpp[m
+[1mindex 3aabc467..195d61cb 100644[m
+[1m--- a/gframe/single_mode.cpp[m
+[1m+++ b/gframe/single_mode.cpp[m
+[36m@@ -304,10 +304,13 @@[m [mrestart:[m
+ 		mainGame->dInfo.isInDuel = false;[m
+ 		mainGame->dInfo.isStarted = false;[m
+ 		mainGame->dInfo.isSingleMode = false;[m
+[31m-		mainGame->dInfo.isHandTest = false;[m
+[31m-		if(!hand_test) {[m
+[31m-			mainGame->closeDuelWindow = true;[m
+[31m-			mainGame->closeDoneSignal.Wait(lock);[m
+[32m+[m		[32mif(mainGame) {[m
+[32m+[m			[32mmainGame->hasPersistentCard = false;[m
+[32m+[m			[32mmainGame->persistentCardCode = 0;[m
+[32m+[m			[32mmainGame->persistentCardPlayer = 0;[m
+[32m+[m		[32m}[m
+[32m+[m		[32mmainGame->closeDuelWindow = true;[m
+[32m+[m		[32mmainGame->closeDoneSignal.Wait(lock);[m
+ 		}[m
+ 		mainGame->btnLeaveGame->setRelativePosition(mainGame->Resize(205, 5, 295, 80));[m
+ 		if(!hand_test) {[m

@@ -1,4 +1,4 @@
-#include "single_mode.h"
+﻿#include "single_mode.h"
 #include "game_config.h"
 #include "duelclient.h"
 #include "game.h"
@@ -304,11 +304,13 @@ restart:
 		mainGame->dInfo.isInDuel = false;
 		mainGame->dInfo.isStarted = false;
 		mainGame->dInfo.isSingleMode = false;
-		mainGame->dInfo.isHandTest = false;
-		if(!hand_test) {
-			mainGame->closeDuelWindow = true;
-			mainGame->closeDoneSignal.Wait(lock);
+		if(mainGame) {
+			mainGame->hasPersistentCard = false;
+			mainGame->persistentCardCode = 0;
+			mainGame->persistentCardPlayer = 0;
 		}
+		mainGame->closeDuelWindow = true;
+		mainGame->closeDoneSignal.Wait(lock);
 		mainGame->btnLeaveGame->setRelativePosition(mainGame->Resize(205, 5, 295, 80));
 		if(!hand_test) {
 			mainGame->ShowElement(mainGame->wSinglePlay);

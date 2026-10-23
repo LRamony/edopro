@@ -1,7 +1,10 @@
 project "Irrlicht"
 	kind "StaticLib"
 	cppdialect "C++17"
-	includedirs "include"
+	includedirs {
+                "include",
+                "C:/vcpkg/installed/x86-windows-static/include"
+        }
 	filter { "system:windows" }
 		links "imm32"
 	filter { "system:haiku" }
@@ -10,7 +13,24 @@ project "Irrlicht"
 	dofile("defines.lua")
 	exceptionhandling "Off"
 	rtti "Off"
-	files { "**.cpp", "**.c", "**.cxx", "**.hpp", "**.h" }
+	files {
+    "**.cpp",
+    "**.c",
+    "**.cxx",
+    "**.hpp",
+    "**.h"
+}
+
+removefiles {
+    "src/Irrlicht/bzip2.disabled/**",
+    "src/Irrlicht/jpeglib.disabled/**",
+    "src/Irrlicht/libpng.disabled/**",
+    "src/Irrlicht/zlib.disabled/**",
+    "src/bzip2/**",
+    "src/jpeglib/**",
+    "src/libpng/**",
+    "src/zlib/**"
+}
 	warnings "Default"
 
 	filter "options:no-direct3d"

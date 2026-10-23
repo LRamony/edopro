@@ -1369,6 +1369,11 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 				mainGame->dInfo.isInDuel = false;
 				mainGame->dInfo.checkRematch = false;
 				mainGame->dInfo.isStarted = false;
+				if(mainGame) {
+					mainGame->hasPersistentCard = false;
+					mainGame->persistentCardCode = 0;
+					mainGame->persistentCardPlayer = 0;
+				}
 				mainGame->btnCreateHost->setEnabled(true);
 				mainGame->btnJoinHost->setEnabled(true);
 				mainGame->btnJoinCancel->setEnabled(true);
@@ -1427,6 +1432,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 			mainGame->showcardcode = data;
 			mainGame->showcarddif = 0;
 			mainGame->showcard = 1;
+			if(gGameConfig->persistentCardInfo && mainGame) {
+				mainGame->SetPersistentCardInfo(data, player);
+			}
 			mainGame->WaitFrameSignal(30, lock);
 			break;
 		}
@@ -1471,6 +1479,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 			mainGame->showcardcode = data;
 			mainGame->showcarddif = 0;
 			mainGame->showcard = 1;
+			if(gGameConfig->persistentCardInfo && mainGame) {
+				mainGame->SetPersistentCardInfo(data, player);
+			}
 			Play(SoundManager::SFX::ACTIVATE);
 			mainGame->WaitFrameSignal(30, lock);
 			break;
@@ -3290,6 +3301,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 			mainGame->showcarddif = 0;
 			mainGame->showcardp = 0;
 			mainGame->showcard = 7;
+			if(gGameConfig->persistentCardInfo && mainGame) {
+				mainGame->SetPersistentCardInfo(code, 0);
+			}
 			mainGame->WaitFrameSignal(30, lock);
 			mainGame->showcard = 0;
 			mainGame->WaitFrameSignal(11, lock);
@@ -3312,6 +3326,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 				mainGame->showcardcode = code;
 				mainGame->showcarddif = 1;
 				mainGame->showcard = 5;
+				if(gGameConfig->persistentCardInfo && mainGame) {
+					mainGame->SetPersistentCardInfo(code, 0);
+				}
 				mainGame->WaitFrameSignal(30, lock);
 				mainGame->showcard = 0;
 				mainGame->WaitFrameSignal(11, lock);
@@ -3341,6 +3358,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 			mainGame->showcarddif = 0;
 			mainGame->showcardp = 0;
 			mainGame->showcard = 7;
+			if(gGameConfig->persistentCardInfo && mainGame) {
+				mainGame->SetPersistentCardInfo(code, 0);
+			}
 			mainGame->WaitFrameSignal(30, lock);
 			mainGame->showcard = 0;
 			mainGame->WaitFrameSignal(11, lock);
@@ -3373,6 +3393,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 			mainGame->showcardcode = code;
 			mainGame->showcarddif = 0;
 			mainGame->showcard = 1;
+			if(gGameConfig->persistentCardInfo && mainGame) {
+				mainGame->SetPersistentCardInfo(code, 0);
+			}
 			pcard->is_highlighting = true;
 			if(pcard->location & 0x30) {
 				constexpr float milliseconds = 5.0f * 1000.0f / 60.0f;
@@ -3463,6 +3486,9 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 			mainGame->showcardcode = mainGame->dField.chains[ct - 1].code;
 			mainGame->showcarddif = 0;
 			mainGame->showcard = 3;
+			if(gGameConfig->persistentCardInfo && mainGame) {
+				mainGame->SetPersistentCardInfo(mainGame->dField.chains[ct - 1].code, 0);
+			}
 			mainGame->WaitFrameSignal(30, lock);
 			mainGame->showcard = 0;
 		}

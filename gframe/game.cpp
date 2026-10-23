@@ -1561,6 +1561,8 @@ void Game::PopulateTabSettingsWindow() {
 		tabSettings.chkIgnoreDeckContents = env->addCheckBox(gGameConfig->ignoreDeckContents, GetNextRect(), tabPanel, CHECKBOX_IGNORE_DECK_CONTENTS, gDataManager->GetSysString(12119).data());
 		menuHandler.MakeElementSynchronized(tabSettings.chkIgnoreDeckContents);
 		defaultStrings.emplace_back(tabSettings.chkIgnoreDeckContents, 12119);
+		tabSettings.chkPersistentCardInfo = env->addCheckBox(gGameConfig->persistentCardInfo, GetNextRect(), tabPanel, CHECKBOX_PERSISTENT_CARD_INFO, L"Persistent Card Information");
+		menuHandler.MakeElementSynchronized(tabSettings.chkPersistentCardInfo);
 		// Check OnResize for button placement information
 		cur_y += 5;
 		btnTabShowSettings = env->addButton(GetNextRect(), tabPanel, BUTTON_SHOW_SETTINGS, gDataManager->GetSysString(2059).data());
@@ -1671,6 +1673,8 @@ void Game::PopulateSettingsWindow() {
 		defaultStrings.emplace_back(gSettings.chkIgnoreDeckContents, 12119);
 		gSettings.chkAddCardNamesInDeckList = env->addCheckBox(gGameConfig->addCardNamesToDeckList, GetNextRect(), sPanel, CHECKBOX_ADD_CARD_NAME_TO_DECK_LIST, gDataManager->GetSysString(12123).data());
 		defaultStrings.emplace_back(gSettings.chkAddCardNamesInDeckList, 12123);
+		gSettings.chkPersistentCardInfo = env->addCheckBox(gGameConfig->persistentCardInfo, GetNextRect(), sPanel, CHECKBOX_PERSISTENT_CARD_INFO, L"Persistent Card Information");
+		menuHandler.MakeElementSynchronized(gSettings.chkPersistentCardInfo);
 	}
 
 	{
@@ -2794,8 +2798,37 @@ void Game::LoadServers() {
 		}
 	}
 }
-void Game::ShowCardInfo(uint32_t code, bool resize, imgType type) {
+void Game::SetPersistentCardInfo(uint32_t code, int player) {
+	if(!gGameConfig->persistentCardInfo || code == 0)
+		return;
+	auto cd = gDataManager->GetCardData(code);
+	if(!cd) {
+		// Try to get anyway? But need valid card
+		// For covers maybe different, but better to only persist real cards
+	}
+	persistentCardCode = code;
+	persistentCardPlayer = player;
+	hasPersistentCard = true;
+	ShowCardInfo(code, false, imgType::ART, true);
+}
+
+void Game::RestorePersistentCardInfo() {
+	if(!gGameConfig->persistentCardInfo || !hasPersistentCard || persistentCardCode == 0)
+		return;
+	ShowCardInfo(persistentCardCode, false, imgType::ART, true);
+}
+
+void Game::ShowCardInfo(uint32_t code, bool resize, imgType type, bool forcePersistent) {
 	static auto prevtype = imgType::ART;
+	if(gGameConfig->persistentCardInfo && !forcePersistent && code != 0) {
+		// When hovering over a different card temporarily, we still want to show it now
+		// but remember to restore persistent after? The requirement says "when cursor passes over another card, allow its info to be displayed temporarily... when cursor leaves, restore to persistent"
+		// This is handled by hover logic - we'll track temporarily hovered card separately
+	}
+	if(gGameConfig->persistentCardInfo && forcePersistent && code != 0) {
+		// Mark as persistent candidate if it's a "relevant" card (activated/summoned/selected)
+		// For now, caller controls this
+	}
 	if(resize) {
 		//Update the text fields beforehand when resizing so that their horizontal size
 		//is correct when the text is set and is then broken into pieces
@@ -2807,6 +2840,10 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type) {
 		stText->setRelativePosition(widthRect);
 	}
 	if(code == 0) {
+		if(gGameConfig->persistentCardInfo && hasPersistentCard) {
+			RestorePersistentCardInfo();
+			return;
+		}
 		ClearCardInfo(0);
 		return;
 	}
@@ -2814,7 +2851,7 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type) {
 	if(!cd)
 		ClearCardInfo(0);
 	bool only_texture = !cd;
-	if(showingcard == code) {
+	if(showingcard == code && !forcePersistent) {
 		if(!resize && !cardimagetextureloading)
 			return;
 		only_texture = only_texture || !resize;
@@ -2826,6 +2863,10 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type) {
 		cardimagetextureloading = true;
 	imgCard->setImage(img);
 	showingcard = code;
+	if(gGameConfig->persistentCardInfo && forcePersistent && code != 0) {
+		persistentCardCode = code;
+		hasPersistentCard = true;
+	}
 	if(only_texture)
 		return;
 	auto tmp_code = code;
@@ -2899,6 +2940,10 @@ void Game::RefreshCardInfoTextPositions() {
 	stText->setRelativePosition(irr::core::recti(xLeft, offset, xRight, stText->getParent()->getAbsolutePosition().getHeight() - Scale(1)));
 }
 void Game::ClearCardInfo(int player) {
+	if(gGameConfig->persistentCardInfo && hasPersistentCard) {
+		RestorePersistentCardInfo();
+		return;
+	}
 	imgCard->setImage(imageManager.tCover[player]);
 	stName->setText(L"");
 	stInfo->setText(L"");
@@ -3001,6 +3046,9 @@ void Game::ClearTextures() {
 		btnCardDisplay[i]->setImage();
 	}
 	imageManager.ClearTexture();
+	hasPersistentCard = false;
+	persistentCardCode = 0;
+	persistentCardPlayer = 0;
 }
 void Game::CloseDuelWindow() {
 	for(auto wit = fadingList.begin(); wit != fadingList.end(); ++wit) {
@@ -3055,6 +3103,9 @@ void Game::CloseDuelWindow() {
 	stTip->setText(L"");
 	cardimagetextureloading = false;
 	showingcard = 0;
+	hasPersistentCard = false;
+	persistentCardCode = 0;
+	persistentCardPlayer = 0;
 	closeDuelWindow = false;
 	closeDoneSignal.Set();
 }

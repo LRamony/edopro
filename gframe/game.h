@@ -560,9 +560,11 @@ public:
 	void ParseGithubRepositories(const std::vector<const GitRepo*>& repos);
 	void UpdateRepoInfo(const GitRepo* repo, RepoGui* grepo);
 	void LoadServers();
-	void ShowCardInfo(uint32_t code, bool resize = false, imgType type = imgType::ART);
+	void ShowCardInfo(uint32_t code, bool resize = false, imgType type = imgType::ART, bool forcePersistent = false);
 	void RefreshCardInfoTextPositions();
 	void ClearCardInfo(int player = 0);
+	void SetPersistentCardInfo(uint32_t code, int player = 0);
+	void RestorePersistentCardInfo();
 	void AddChatMsg(epro::wstringview msg, int player, int type);
 	void AddChatMsg(epro::wstringview name, epro::wstringview msg, int type);
 	void AddLog(epro::wstringview msg, int param = 0);
@@ -694,6 +696,10 @@ public:
 	uint32_t showingcard;
 	bool cardimagetextureloading;
 	float dpi_scale;
+	// Persistent card info
+	uint32_t persistentCardCode;
+	int persistentCardPlayer;
+	bool hasPersistentCard;
 
 
 	irr::core::dimension2d<irr::u32> window_size;

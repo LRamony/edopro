@@ -149,6 +149,11 @@ int ReplayMode::ReplayThread() {
 	return 0;
 }
 void ReplayMode::EndDuel() {
+	if(mainGame) {
+		mainGame->hasPersistentCard = false;
+		mainGame->persistentCardCode = 0;
+		mainGame->persistentCardPlayer = 0;
+	}
 	if(pduel) {
 		pduel = nullptr;
 	}

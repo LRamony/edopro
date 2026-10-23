@@ -113,6 +113,7 @@ OPTION(uint16_t, minExtraDeckSize, 0)
 OPTION(uint16_t, maxExtraDeckSize, 15)
 OPTION(uint16_t, minSideDeckSize, 0)
 OPTION(uint16_t, maxSideDeckSize, 15)
+OPTION(bool, persistentCardInfo, false)
 #if EDOPRO_ANDROID
 OPTION(bool, native_keyboard, false)
 OPTION(bool, native_mouse, false)

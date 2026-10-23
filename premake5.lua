@@ -227,8 +227,11 @@ workspace "ygo"
 			local full_vcpkg_root_path=get_vcpkg_root_path(arch)
 			print(full_vcpkg_root_path)
 			local platform="platforms:" .. (arch=="x86" and os.istarget("windows") and "Win32" or arch)
+			filter { "platforms:Win32 or platforms:x64", "action:vs*" }
+    externalincludedirs { full_vcpkg_root_path .. "/include" }
+
 			filter { "action:not vs*", platform }
-				externalincludedirs { full_vcpkg_root_path .. "/include" }
+    externalincludedirs { full_vcpkg_root_path .. "/include" }
 
 			filter { "action:not vs*", "configurations:Debug", platform }
 				libdirs { full_vcpkg_root_path .. "/debug/lib" }

@@ -871,7 +871,10 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 			case LISTBOX_ANCARD: {
 				int sel = mainGame->lstANCard->getSelected();
 				if(sel != -1) {
-					mainGame->ShowCardInfo(ancard[sel]);
+					if(gGameConfig->persistentCardInfo && mainGame)
+						mainGame->SetPersistentCardInfo(ancard[sel], 0);
+					else
+						mainGame->ShowCardInfo(ancard[sel]);
 				}
 				break;
 			}
@@ -1030,12 +1033,19 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 					SetShowMark(mcard, true);
 					ShowCardInfoInList(mcard, mainGame->btnCardSelect[id - BUTTON_CARD_0], mainGame->wCardSelect);
 					if(mcard->code) {
-						mainGame->ShowCardInfo(mcard->code);
+						if(gGameConfig->persistentCardInfo && mainGame)
+							mainGame->SetPersistentCardInfo(mcard->code, mcard->controler);
+						else
+							mainGame->ShowCardInfo(mcard->code);
 					} else {
 						if(mcard->cover)
 							mainGame->ShowCardInfo(mcard->cover, false, imgType::COVER);
-						else
-							mainGame->ClearCardInfo(mcard->controler);
+						else {
+							if(gGameConfig->persistentCardInfo && mainGame && mainGame->hasPersistentCard)
+								mainGame->RestorePersistentCardInfo();
+							else
+								mainGame->ClearCardInfo(mcard->controler);
+						}
 					}
 				}
 			}
@@ -1046,12 +1056,19 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 					SetShowMark(mcard, true);
 					ShowCardInfoInList(mcard, mainGame->btnCardDisplay[id - BUTTON_DISPLAY_0], mainGame->wCardDisplay);
 					if(mcard->code) {
-						mainGame->ShowCardInfo(mcard->code);
+						if(gGameConfig->persistentCardInfo && mainGame)
+							mainGame->SetPersistentCardInfo(mcard->code, mcard->controler);
+						else
+							mainGame->ShowCardInfo(mcard->code);
 					} else {
 						if(mcard->cover)
 							mainGame->ShowCardInfo(mcard->cover, false, imgType::COVER);
-						else
-							mainGame->ClearCardInfo(mcard->controler);
+						else {
+							if(gGameConfig->persistentCardInfo && mainGame && mainGame->hasPersistentCard)
+								mainGame->RestorePersistentCardInfo();
+							else
+								mainGame->ClearCardInfo(mcard->controler);
+						}
 					}
 				}
 			}
@@ -1079,6 +1096,9 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 			}
 			if(id == TEXT_CARD_LIST_TIP) {
 				mainGame->stCardListTip->setVisible(false);
+			}
+			if(gGameConfig->persistentCardInfo && mainGame && mainGame->hasPersistentCard) {
+				mainGame->RestorePersistentCardInfo();
 			}
 			break;
 		}
@@ -1578,6 +1598,9 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 							mainGame->hideChat = false;
 					}
 					SetShowMark(hovered_card, false);
+					if(gGameConfig->persistentCardInfo && mainGame->hasPersistentCard) {
+						mainGame->RestorePersistentCardInfo();
+					}
 				}
 				if(mcard) {
 					if(mcard != clicked_card)
@@ -1590,7 +1613,10 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 					}
 					SetShowMark(mcard, true);
 					if(mcard->code) {
-						mainGame->ShowCardInfo(mcard->code);
+						if(gGameConfig->persistentCardInfo)
+							mainGame->ShowCardInfo(mcard->code);
+						else
+							mainGame->ShowCardInfo(mcard->code);
 						if(mcard->location & (LOCATION_HAND | LOCATION_MZONE | LOCATION_SZONE | LOCATION_SKILL)) {
 							std::wstring str(gDataManager->GetName(mcard->code));
 							if(mcard->alias != 0 && !CardDataC::IsInArtworkOffsetRange(mcard) && str != gDataManager->GetName(mcard->alias)) {
@@ -1637,10 +1663,17 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 						}
 					} else {
 						should_show_tip = false;
-						if(mcard->cover)
-							mainGame->ShowCardInfo(mcard->cover, false, imgType::COVER);
-						else
-							mainGame->ClearCardInfo(mcard->controler);
+						if(mcard->cover) {
+							if(gGameConfig->persistentCardInfo)
+								mainGame->ShowCardInfo(mcard->cover, false, imgType::COVER);
+							else
+								mainGame->ShowCardInfo(mcard->cover, false, imgType::COVER);
+						} else {
+							if(gGameConfig->persistentCardInfo && mainGame->hasPersistentCard)
+								mainGame->RestorePersistentCardInfo();
+							else
+								mainGame->ClearCardInfo(mcard->controler);
+						}
 					}
 				}
 				hovered_card = mcard;
@@ -1899,7 +1932,10 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 			case LISTBOX_LOG: {
 				int sel = mainGame->lstLog->getSelected();
 				if(sel != -1 && (int)mainGame->logParam.size() >= sel && mainGame->logParam[sel]) {
-					mainGame->ShowCardInfo(mainGame->logParam[sel]);
+					if(gGameConfig->persistentCardInfo && mainGame)
+						mainGame->SetPersistentCardInfo(mainGame->logParam[sel], 0);
+					else
+						mainGame->ShowCardInfo(mainGame->logParam[sel]);
 				}
 				return true;
 			}
@@ -1972,6 +2008,15 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 			}
 			case CHECKBOX_IGNORE_DECK_CONTENTS: {
 				gGameConfig->ignoreDeckContents = mainGame->gSettings.chkIgnoreDeckContents->isChecked();
+				return true;
+			}
+			case CHECKBOX_PERSISTENT_CARD_INFO: {
+				if(mainGame->tabSettings.chkPersistentCardInfo)
+					gGameConfig->persistentCardInfo = mainGame->tabSettings.chkPersistentCardInfo->isChecked();
+				else if(mainGame->gSettings.chkPersistentCardInfo)
+					gGameConfig->persistentCardInfo = mainGame->gSettings.chkPersistentCardInfo->isChecked();
+				else
+					gGameConfig->persistentCardInfo = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
 				return true;
 			}
 			case CHECKBOX_ADD_CARD_NAME_TO_DECK_LIST: {
