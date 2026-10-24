@@ -926,6 +926,26 @@ void Game::Initialize() {
 	defaultStrings.emplace_back(btnCreateHost2, 1224);
 	btnCreateHost2->setAlignment(irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_UPPERLEFT, irr::gui::EGUIA_UPPERLEFT);
 
+	//play (quick match) button below the host button, with the search counter below it
+	btnQuickMatch = env->addButton(Scale(904, 55, 1014, 80), wRoomListPlaceholder, BUTTON_QUICK_MATCH, L"Play");
+	btnQuickMatch->setAlignment(irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_UPPERLEFT, irr::gui::EGUIA_UPPERLEFT);
+	stQuickMatchStatus = env->addStaticText(L"", Scale(904, 85, 1014, 110), false, false, wRoomListPlaceholder);
+	stQuickMatchStatus->setOverrideColor(roomlistcolor);
+	stQuickMatchStatus->setTextAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER);
+	stQuickMatchStatus->setAlignment(irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_UPPERLEFT, irr::gui::EGUIA_UPPERLEFT);
+	stQuickMatchStatus->setVisible(false);
+
+	//quick match popup
+	wQuickMatch = env->addWindow(Scale(357, 200, 667, 330), false, L"Search Room");
+	wQuickMatch->getCloseButton()->setVisible(false);
+	wQuickMatch->setVisible(false);
+	wQuickMatch->setAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER);
+	env->addStaticText(L"Style:", Scale(20, 30, 100, 50), false, false, wQuickMatch);
+	cbQuickMatchStyle = AddComboBox(env, Scale(100, 25, 290, 50), wQuickMatch, -1);
+	chkQuickMatchSearchNext = env->addCheckBox(false, Scale(20, 60, 290, 80), wQuickMatch, -1, L"Search Next");
+	btnQuickMatchStart = env->addButton(Scale(70, 90, 140, 115), wQuickMatch, BUTTON_QUICK_MATCH_START, gDataManager->GetSysString(1211).data());
+	btnQuickMatchCancel = env->addButton(Scale(170, 90, 240, 115), wQuickMatch, BUTTON_QUICK_MATCH_CANCEL, gDataManager->GetSysString(1212).data());
+
 	//filter dropdowns
 	cbFilterRule = AddComboBox(env, Scale(392, 25, 532, 50), wRoomListPlaceholder, CB_FILTER_ALLOWED_CARDS);
 	//cbFilterMatchMode = AddComboBox(env, Scale(392, 55, 532, 80), wRoomListPlaceholder, CB_FILTER_MATCH_MODE);
@@ -976,13 +996,13 @@ void Game::Initialize() {
 	ebRoomName->setAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER, irr::gui::EGUIA_UPPERLEFT, irr::gui::EGUIA_UPPERLEFT);
 
 	//show locked rooms checkbox
-	chkShowPassword = irr::gui::CGUICustomCheckBox::addCustomCheckBox(false, env, Scale(642, 55, 1024, 80), wRoomListPlaceholder, CHECK_SHOW_LOCKED_ROOMS, gDataManager->GetSysString(1994).data());
+	chkShowPassword = irr::gui::CGUICustomCheckBox::addCustomCheckBox(false, env, Scale(642, 55, 895, 80), wRoomListPlaceholder, CHECK_SHOW_LOCKED_ROOMS, gDataManager->GetSysString(1994).data());
 	defaultStrings.emplace_back(chkShowPassword, 1994);
 	((irr::gui::CGUICustomCheckBox*)chkShowPassword)->setColor(roomlistcolor);
 	chkShowPassword->setAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER, irr::gui::EGUIA_UPPERLEFT, irr::gui::EGUIA_UPPERLEFT);
 
 	//show active rooms checkbox
-	chkShowActiveRooms = irr::gui::CGUICustomCheckBox::addCustomCheckBox(false, env, Scale(642, 85, 1024, 110), wRoomListPlaceholder, CHECK_SHOW_ACTIVE_ROOMS, gDataManager->GetSysString(1985).data());
+	chkShowActiveRooms = irr::gui::CGUICustomCheckBox::addCustomCheckBox(false, env, Scale(642, 85, 895, 110), wRoomListPlaceholder, CHECK_SHOW_ACTIVE_ROOMS, gDataManager->GetSysString(1985).data());
 	defaultStrings.emplace_back(chkShowActiveRooms, 1985);
 	((irr::gui::CGUICustomCheckBox*)chkShowActiveRooms)->setColor(roomlistcolor);
 	chkShowActiveRooms->setAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER, irr::gui::EGUIA_UPPERLEFT, irr::gui::EGUIA_UPPERLEFT);
@@ -1042,6 +1062,7 @@ void Game::Initialize() {
 	defaultStrings.emplace_back(btnJoinCancel2, 1212);
 	btnJoinHost2->setAlignment(irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT);
 	btnJoinCancel2->setAlignment(irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT, irr::gui::EGUIA_LOWERRIGHT);
+
 
 
 	//load server(s)
@@ -2014,8 +2035,10 @@ bool Game::MainLoop() {
 			}
 		}
 		ParseGithubRepositories(gRepoManager->GetReadyRepos());
-		if(ServerLobby::HasRefreshedRooms())
-			ServerLobby::FillOnlineRooms();
+	if(ServerLobby::HasRefreshedRooms()) {
+		ServerLobby::FillOnlineRooms();
+	}
+	ServerLobby::UpdateQuickMatch();
 #ifdef YGOPRO_BUILD_DLL
 		if(!dInfo.isStarted) {
 			LoadCoreFromRepos();

@@ -382,6 +382,13 @@ struct server_lobby_page_elements {
 	irr::gui::IGUIComboBox* serverChoice;
 	irr::gui::IGUIEditBox* ebNickNameOnline;
 	irr::gui::IGUIButton* btnCreateHost2;
+	irr::gui::IGUIButton* btnQuickMatch;
+	irr::gui::IGUIStaticText* stQuickMatchStatus;
+	irr::gui::IGUIWindow* wQuickMatch;
+	irr::gui::IGUIComboBox* cbQuickMatchStyle;
+	irr::gui::IGUICheckBox* chkQuickMatchSearchNext;
+	irr::gui::IGUIButton* btnQuickMatchStart;
+	irr::gui::IGUIButton* btnQuickMatchCancel;
 	irr::gui::IGUIComboBox* cbFilterRule;
 	irr::gui::IGUIComboBox* cbFilterBanlist;
 	irr::gui::IGUIStaticText* ebRoomNameText;

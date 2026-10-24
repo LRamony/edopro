@@ -25,6 +25,7 @@
 #include <IGUITabControl.h>
 #include <IGUITable.h>
 #include <IGUIWindow.h>
+#include <chrono>
 #include "address.h"
 #include "fmt.h"
 #include "localtime.h"
@@ -50,6 +51,104 @@ static void UpdateDeck() {
 		BufferIO::Write<uint32_t>(pdeck, pcard->code);
 	DuelClient::SendBufferToServer(CTOS_UPDATE_DECK, deckbuf, pdeck - deckbuf);
 	gdeckManager->sent_deck = mainGame->deckBuilder.GetCurrentDeck();
+}
+
+// same behaviour as clicking the "ready" button in the room lobby
+static bool SendHostPrepReady() {
+	const auto selected = mainGame->cbDeckSelect->getSelected();
+	if(selected == -1)
+		return false;
+	if(!mainGame->deckBuilder.SetCurrentDeckFromFile(Utils::ToPathString(mainGame->cbDeckSelect->getItem(selected)), false,
+													 mainGame->dInfo.HasFieldFlag(DUEL_EXTRA_DECK_RITUAL) ? RITUAL_LOCATION::EXTRA : RITUAL_LOCATION::MAIN))
+		return false;
+	UpdateDeck();
+	DuelClient::SendPacketToServer(CTOS_HS_READY);
+	mainGame->cbDeckSelect->setEnabled(false);
+	if(mainGame->dInfo.team1 + mainGame->dInfo.team2 > 2)
+		mainGame->btnHostPrepDuelist->setEnabled(false);
+	return true;
+}
+
+// same behaviour as clicking the "cancel" button in the room lobby
+static void LeaveHostPrepare() {
+	DuelClient::StopClient();
+	mainGame->dInfo.isInLobby = false;
+	mainGame->btnCreateHost->setEnabled(true);
+	mainGame->btnJoinHost->setEnabled(true);
+	mainGame->btnJoinCancel->setEnabled(true);
+	mainGame->HideElement(mainGame->wHostPrepare);
+	mainGame->HideElement(mainGame->gBot.window);
+	if(mainGame->wHostPrepareR->isVisible())
+		mainGame->HideElement(mainGame->wHostPrepareR);
+	if(mainGame->wHostPrepareL->isVisible())
+		mainGame->HideElement(mainGame->wHostPrepareL);
+	if(mainGame->isHostingOnline)
+		mainGame->ShowElement(mainGame->wRoomListPlaceholder);
+	else
+		mainGame->ShowElement(mainGame->wLanWindow);
+	mainGame->wChat->setVisible(false);
+}
+
+void ServerLobby::QuickMatchLeaveRoom() {
+	LeaveHostPrepare();
+}
+
+// called every frame: quick match behaviour while inside a room lobby
+void ServerLobby::QuickMatchLobbyTick() {
+	using clock = std::chrono::steady_clock;
+	static clock::time_point lobby_start;
+	static bool timer_running = false;
+	if(quickMatchRole == QM_NONE)
+		return;
+	if(!quickMatchSession) {
+		quickMatchRole = QM_NONE;
+		return;
+	}
+	if(!mainGame->dInfo.isInLobby) {
+		timer_running = false;
+		return;
+	}
+	const auto now = clock::now();
+	if(!timer_running) {
+		timer_running = true;
+		lobby_start = now;
+	}
+	// leave the room and go back to searching with the last "Play" settings
+	const auto leave_and_search = [&]() {
+		timer_running = false;
+		quickMatchRole = QM_NONE;
+		quickMatchTypeChanged = false;
+		LeaveHostPrepare();
+		quickMatchRestartPending = true;
+	};
+	// the host of the room we joined didn't start the duel in 1 minute
+	if(quickMatchRole == QM_GUEST && now - lobby_start > std::chrono::seconds(60)) {
+		leave_and_search();
+		return;
+	}
+	if(!quickMatchTypeChanged)
+		return;
+	quickMatchTypeChanged = false;
+	// joined as a spectator: leave and look for another room
+	if(mainGame->dInfo.player_type >= mainGame->dInfo.team1 + mainGame->dInfo.team2) {
+		if(quickMatchRole == QM_GUEST)
+			leave_and_search();
+		return;
+	}
+	// pick the last deck used in the deck editor and click "ready"
+	for(irr::u32 i = 0; i < mainGame->cbDeckSelect->getItemCount(); i++) {
+		if(gGameConfig->lastdeck == mainGame->cbDeckSelect->getItem(i)) {
+			mainGame->cbDeckSelect->setSelected(static_cast<irr::s32>(i));
+			break;
+		}
+	}
+	if(!SendHostPrepReady()) {
+		timer_running = false;
+		quickMatchRole = QM_NONE;
+		quickMatchSession = false;
+		LeaveHostPrepare();
+		mainGame->PopupMessage(L"No valid deck to play. Create or save a deck in the deck editor.");
+	}
 }
 static void LoadReplay() {
 	auto& replay = ReplayMode::cur_replay;
@@ -237,6 +336,51 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 				mainGame->ShowElement(mainGame->wCreateHost);
 				break;
 			}
+			case BUTTON_QUICK_MATCH: {
+				// the same button starts and cancels the search
+				if(ServerLobby::quickMatchActive) {
+					ServerLobby::CancelQuickMatch();
+					break;
+				}
+				if(!gGameConfig->quickMatchStyle.empty()) {
+					ServerLobby::StartQuickMatch(gGameConfig->quickMatchStyle, gGameConfig->quickMatchSearchNext, static_cast<int>(gGameConfig->quickMatchTimeout));
+					break;
+				}
+				mainGame->cbQuickMatchStyle->clear();
+				for(const auto& style : ServerLobby::GetAvailableStyles())
+					mainGame->cbQuickMatchStyle->addItem(style.data());
+				if(mainGame->cbQuickMatchStyle->getItemCount() == 0)
+					break;
+				mainGame->cbQuickMatchStyle->setSelected(0);
+				mainGame->chkQuickMatchSearchNext->setChecked(gGameConfig->quickMatchSearchNext);
+				mainGame->wQuickMatch->setVisible(true);
+				mainGame->wQuickMatch->getParent()->bringToFront(mainGame->wQuickMatch);
+				mainGame->env->setFocus(mainGame->wQuickMatch);
+				break;
+			}
+			case BUTTON_QUICK_MATCH_START: {
+				const auto sel = mainGame->cbQuickMatchStyle->getSelected();
+				if(sel < 0)
+					break;
+				const std::wstring style = mainGame->cbQuickMatchStyle->getItem(sel);
+				const bool search_next = mainGame->chkQuickMatchSearchNext->isChecked();
+				mainGame->wQuickMatch->setVisible(false);
+				gGameConfig->quickMatchSearchNext = search_next;
+				// choosing the same style more than once makes it the default (the popup is not shown anymore)
+				if(gGameConfig->quickMatchLastChoice == style) {
+					if(++gGameConfig->quickMatchChoiceCount >= 2)
+						gGameConfig->quickMatchStyle = style;
+				} else {
+					gGameConfig->quickMatchLastChoice = style;
+					gGameConfig->quickMatchChoiceCount = 1;
+				}
+				ServerLobby::StartQuickMatch(style, search_next, static_cast<int>(gGameConfig->quickMatchTimeout));
+				break;
+			}
+			case BUTTON_QUICK_MATCH_CANCEL: {
+				mainGame->wQuickMatch->setVisible(false);
+				break;
+			}
 			case BUTTON_RULE_CARDS: {
 				mainGame->PopupElement(mainGame->wRules);
 				break;
@@ -308,17 +452,7 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 				break;
 			}
 			case BUTTON_HP_READY: {
-				const auto selected = mainGame->cbDeckSelect->getSelected();
-				if(selected == -1)
-					break;
-				if(!mainGame->deckBuilder.SetCurrentDeckFromFile(Utils::ToPathString(mainGame->cbDeckSelect->getItem(selected)), false,
-																 mainGame->dInfo.HasFieldFlag(DUEL_EXTRA_DECK_RITUAL) ? RITUAL_LOCATION::EXTRA : RITUAL_LOCATION::MAIN))
-					break;
-				UpdateDeck();
-				DuelClient::SendPacketToServer(CTOS_HS_READY);
-				mainGame->cbDeckSelect->setEnabled(false);
-				if(mainGame->dInfo.team1 + mainGame->dInfo.team2 > 2)
-					mainGame->btnHostPrepDuelist->setEnabled(false);
+				SendHostPrepReady();
 				break;
 			}
 			case BUTTON_HP_NOTREADY: {
@@ -333,22 +467,11 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 				break;
 			}
 			case BUTTON_HP_CANCEL: {
-				DuelClient::StopClient();
-				mainGame->dInfo.isInLobby = false;
-				mainGame->btnCreateHost->setEnabled(true);
-				mainGame->btnJoinHost->setEnabled(true);
-				mainGame->btnJoinCancel->setEnabled(true);
-				mainGame->HideElement(mainGame->wHostPrepare);
-				mainGame->HideElement(mainGame->gBot.window);
-				if (mainGame->wHostPrepareR->isVisible())
-					mainGame->HideElement(mainGame->wHostPrepareR);
-				if (mainGame->wHostPrepareL->isVisible())
-					mainGame->HideElement(mainGame->wHostPrepareL);
-				if(mainGame->isHostingOnline)
-					mainGame->ShowElement(mainGame->wRoomListPlaceholder);
-				else
-					mainGame->ShowElement(mainGame->wLanWindow);
-				mainGame->wChat->setVisible(false);
+				// leaving by hand ends the quick match session
+				ServerLobby::quickMatchSession = false;
+				ServerLobby::quickMatchRole = ServerLobby::QM_NONE;
+				ServerLobby::quickMatchRestartPending = false;
+				LeaveHostPrepare();
 				break;
 			}
 			case BUTTON_REPLAY_MODE: {

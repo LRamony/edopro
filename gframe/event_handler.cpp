@@ -1,4 +1,4 @@
-#include <algorithm>
+﻿#include <algorithm>
 #include <cassert>
 #include "utils.h"
 #include "game_config.h"
@@ -6,7 +6,8 @@
 #include "client_card.h"
 #include "math.h"
 #include "network.h"
-#include "game.h"
+#include "game.h"
+#include "server_lobby.h"
 #include "duelclient.h"
 #include "data_manager.h"
 #include "image_manager.h"
@@ -3111,3 +3112,4 @@ void ClientField::SendRPSResult(uint8_t i) {
 	}
 }
 }
+

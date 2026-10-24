@@ -1,11 +1,14 @@
-#include <nlohmann/json.hpp>
+﻿#include <nlohmann/json.hpp>
 #include <IGUITable.h>
 #include <IGUIEditBox.h>
 #include <IGUIComboBox.h>
 #include <IGUIButton.h>
 #include <IGUICheckBox.h>
 #include <IGUIWindow.h>
+#include <IGUIStaticText.h>
 #include <ICursorControl.h>
+#include <chrono>
+#include <algorithm>
 #include "server_lobby.h"
 #include "utils.h"
 #include "data_manager.h"
@@ -18,6 +21,7 @@
 #include "address.h"
 #include "fmt.h"
 #include "curl.h"
+#include "deck_manager.h"
 
 namespace ygo {
 
@@ -25,12 +29,214 @@ std::vector<RoomInfo> ServerLobby::roomsVector;
 std::vector<ServerInfo> ServerLobby::serversVector;
 std::atomic_bool ServerLobby::is_refreshing{ false };
 std::atomic_bool ServerLobby::has_refreshed{ false };
+std::atomic<uint32_t> ServerLobby::fetch_counter{ 0 };
+std::atomic_bool ServerLobby::last_fetch_ok{ false };
+std::atomic_bool ServerLobby::quickMatchActive{ false };
+std::atomic_bool ServerLobby::quickMatchSession{ false };
+std::atomic_bool ServerLobby::quickMatchRestartPending{ false };
+std::atomic<int> ServerLobby::quickMatchRole{ ServerLobby::QM_NONE };
+std::atomic_bool ServerLobby::quickMatchTypeChanged{ false };
+std::wstring ServerLobby::quickMatchStyle;
+bool ServerLobby::quickMatchSearchNext = false;
+int ServerLobby::quickMatchTimeoutSeconds = 300;
 
+#include <ctime>
 static size_t WriteMemoryCallback(char* contents, size_t size, size_t nmemb, void* userp) {
 	size_t realsize = size * nmemb;
 	auto buff = static_cast<std::string*>(userp);
 	buff->append(contents, realsize);
 	return realsize;
+}
+std::wstring ServerLobby::GetStyleFromBanlistName(const std::wstring& banlistName) {
+	// banlist names look like "2026.10 TCG" or "2005.4 GOAT": drop the leading date, keep the style
+	std::wstring result = banlistName;
+	const auto pos = result.find(L' ');
+	if(pos != std::wstring::npos && pos > 0) {
+		const bool is_date = result.find_first_not_of(L"0123456789.", 0) == pos && result.find(L'.') < pos;
+		if(is_date)
+			result.erase(0, pos + 1);
+	}
+	return result;
+}
+std::vector<std::wstring> ServerLobby::GetAvailableStyles() {
+	std::vector<std::wstring> styles;
+	for(const auto& list : gdeckManager->_lfList) {
+		auto style = GetStyleFromBanlistName(list.listName);
+		if(style.empty() || list.hash == 0)
+			continue;
+		if(std::find(styles.begin(), styles.end(), style) == styles.end())
+			styles.push_back(std::move(style));
+	}
+	return styles;
+}
+
+namespace {
+using qm_clock = std::chrono::steady_clock;
+qm_clock::time_point qmDeadline;
+qm_clock::time_point qmNextRefresh;
+bool qmWaiting = false;
+uint32_t qmGenAtStart = 0;
+int qmHomeServer = -1;
+}
+
+void ServerLobby::SetQuickMatchUi(bool searching) {
+	irr::gui::IGUIElement* elems[] = {
+		mainGame->serverChoice, mainGame->ebNickNameOnline, mainGame->btnCreateHost2,
+		mainGame->cbFilterRule, mainGame->cbFilterBanlist, mainGame->ebOnlineTeam1,
+		mainGame->ebOnlineTeam2, mainGame->ebOnlineBestOf, mainGame->btnFilterRelayMode,
+		mainGame->ebRoomName, mainGame->chkShowPassword, mainGame->chkShowActiveRooms,
+		mainGame->roomListTable, mainGame->btnLanRefresh2, mainGame->btnJoinHost2,
+		mainGame->btnJoinCancel2
+	};
+	for(auto* elem : elems) {
+		if(elem->isEnabled() == searching)
+			elem->setEnabled(!searching);
+	}
+	mainGame->btnQuickMatch->setText(searching ? gDataManager->GetSysString(1212).data() : L"Play");
+	mainGame->stQuickMatchStatus->setVisible(searching);
+	if(!searching)
+		mainGame->stQuickMatchStatus->setText(L"");
+}
+
+bool ServerLobby::StartQuickMatch(const std::wstring& style, bool searchNext, int timeoutSeconds) {
+	if(quickMatchActive || serversVector.empty())
+		return false;
+	if(wcslen(mainGame->ebNickNameOnline->getText()) == 0) {
+		mainGame->PopupMessage(gDataManager->GetSysString(1257), gDataManager->GetSysString(1256));
+		return false;
+	}
+	quickMatchStyle = style;
+	quickMatchSearchNext = searchNext;
+	quickMatchTimeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 300;
+	qmDeadline = qm_clock::now() + std::chrono::seconds(quickMatchTimeoutSeconds);
+	qmNextRefresh = qm_clock::now();
+	qmWaiting = false;
+	if(mainGame->serverChoice->getSelected() < 0)
+		mainGame->serverChoice->setSelected(0);
+	qmHomeServer = mainGame->serverChoice->getSelected();
+	quickMatchRestartPending = false;
+	quickMatchSession = true;
+	quickMatchActive = true;
+	SetQuickMatchUi(true);
+	return true;
+}
+
+void ServerLobby::CancelQuickMatch() {
+	quickMatchActive = false;
+	quickMatchSession = false;
+	quickMatchRestartPending = false;
+	qmWaiting = false;
+	SetQuickMatchUi(false);
+}
+
+bool ServerLobby::JoinRoomDirect(uint32_t roomid) {
+	mainGame->ebNickName->setText(mainGame->ebNickNameOnline->getText());
+	const auto selected = mainGame->serverChoice->getSelected();
+	if(selected < 0 || selected >= static_cast<int>(serversVector.size()))
+		return false;
+	const auto& host = serversVector[selected].Resolved();
+	if(host.address.family == epro::Address::UNK)
+		return false;
+	mainGame->dInfo.secret.pass.clear();
+	DuelClient::is_local_host = false;
+	if(!DuelClient::StartClient(host.address, host.port, roomid, false))
+		return false;
+	quickMatchActive = false;
+	qmWaiting = false;
+	quickMatchTypeChanged = false;
+	quickMatchRole = QM_GUEST;
+	SetQuickMatchUi(false);
+	mainGame->HideElement(mainGame->wRoomListPlaceholder);
+	return true;
+}
+
+void ServerLobby::HostQuickMatchRoom() {
+	quickMatchActive = false;
+	qmWaiting = false;
+	SetQuickMatchUi(false);
+	// host on the server the search started from, using the current host configuration,
+	// only forcing best of 3 and the banlist of the searched style
+	if(qmHomeServer >= 0 && qmHomeServer < static_cast<int>(serversVector.size()))
+		mainGame->serverChoice->setSelected(qmHomeServer);
+	for(irr::u32 i = 0; i < mainGame->cbHostLFList->getItemCount(); i++) {
+		const auto* lflist = gdeckManager->GetLFList(mainGame->cbHostLFList->getItemData(i));
+		if(lflist && GetStyleFromBanlistName(lflist->listName) == quickMatchStyle) {
+			mainGame->cbHostLFList->setSelected(i);
+			break;
+		}
+	}
+	mainGame->ebBestOf->setText(L"3");
+	mainGame->isHostingOnline = true;
+	mainGame->ebNickName->setText(mainGame->ebNickNameOnline->getText());
+	const auto selected = mainGame->serverChoice->getSelected();
+	if(selected < 0 || selected >= static_cast<int>(serversVector.size()))
+		return;
+	const auto& host = serversVector[selected].Resolved();
+	if(host.address.family == epro::Address::UNK)
+		return;
+	DuelClient::is_local_host = false;
+	quickMatchTypeChanged = false;
+	if(DuelClient::StartClient(host.address, host.port)) {
+		quickMatchRole = QM_HOST;
+		mainGame->HideElement(mainGame->wRoomListPlaceholder);
+	}
+}
+
+void ServerLobby::UpdateQuickMatch() {
+	QuickMatchLobbyTick();
+	const auto now = qm_clock::now();
+	if(!quickMatchActive) {
+		// "Search Next": back at the room list after a finished match, search again
+		if(quickMatchRestartPending && quickMatchSession && mainGame->wRoomListPlaceholder->isVisible() && !is_refreshing) {
+			quickMatchRestartPending = false;
+			if(!StartQuickMatch(quickMatchStyle, quickMatchSearchNext, quickMatchTimeoutSeconds))
+				quickMatchSession = false;
+		}
+		return;
+	}
+	// the refresh thread re-enables some of the controls, keep everything locked while searching
+	SetQuickMatchUi(true);
+	const auto remaining = std::chrono::duration_cast<std::chrono::seconds>(qmDeadline - now).count();
+	if(remaining <= 0) {
+		HostQuickMatchRoom();
+		return;
+	}
+	mainGame->stQuickMatchStatus->setText(epro::format(L"{}:{:02}", remaining / 60, remaining % 60).data());
+	if(qmWaiting) {
+		if(is_refreshing || fetch_counter == qmGenAtStart)
+			return;
+		qmWaiting = false;
+		if(last_fetch_ok) {
+			for(const auto& room : roomsVector) {
+				if(room.started || room.locked)
+					continue;
+				// full room: we would join as a spectator
+				if(room.players.size() >= static_cast<size_t>(room.info.team1 + room.info.team2))
+					continue;
+				std::wstring banlist;
+				for(const auto& list : gdeckManager->_lfList) {
+					if(list.hash == room.info.lflist) {
+						banlist = list.listName;
+						break;
+					}
+				}
+				if(GetStyleFromBanlistName(banlist) == quickMatchStyle && JoinRoomDirect(room.id))
+					return;
+			}
+		}
+		// not found on this server, go to the next one (all servers = global search)
+		if(serversVector.size() > 1) {
+			const auto next = (mainGame->serverChoice->getSelected() + 1) % static_cast<int>(serversVector.size());
+			mainGame->serverChoice->setSelected(next);
+		}
+		qmNextRefresh = now + std::chrono::seconds(2);
+		return;
+	}
+	if(now >= qmNextRefresh && !is_refreshing) {
+		qmGenAtStart = fetch_counter;
+		qmWaiting = true;
+		RefreshRooms();
+	}
 }
 
 void ServerLobby::FillOnlineRooms() {
@@ -199,16 +405,21 @@ void ServerLobby::GetRoomsThread() {
 			ErrorLog("Curl error: ({}) {} ({})", res, curl_easy_strerror(res), curl_error_buffer);
 		}
 		//error
-		mainGame->PopupMessage(gDataManager->GetSysString(2037));
+		//while searching for a quick match, failing servers are silently skipped
+		if(!quickMatchActive)
+			mainGame->PopupMessage(gDataManager->GetSysString(2037));
 		mainGame->btnLanRefresh2->setEnabled(true);
 		mainGame->serverChoice->setEnabled(true);
 		mainGame->roomListTable->setVisible(true);
+		last_fetch_ok = false;
 		is_refreshing = false;
 		has_refreshed = true;
+		++fetch_counter;
 		return;
 	}
 
 	roomsVector.clear();
+	bool parsed_ok = true;
 	try {
 		auto j = nlohmann::json::parse(retrieved_data);
 		if(j.size()) {
@@ -252,9 +463,12 @@ void ServerLobby::GetRoomsThread() {
 		}
 	} catch(const std::exception& e) {
 		ErrorLog("Exception occurred parsing server rooms: {}", e.what());
+		parsed_ok = false;
 	}
+	last_fetch_ok = parsed_ok;
 	has_refreshed = true;
 	is_refreshing = false;
+	++fetch_counter;
 }
 bool ServerLobby::IsKnownHost(epro::Host host) {
 	return std::find_if(serversVector.begin(), serversVector.end(), [&](const ServerInfo& konwn_host) {
@@ -317,3 +531,4 @@ const epro::Host& ServerInfo::Resolved() const {
 }
 
 }
+

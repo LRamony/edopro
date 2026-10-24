@@ -1,4 +1,4 @@
-#include <algorithm>
+﻿#include <algorithm>
 #include "config.h"
 #if EDOPRO_WINDOWS
 #include <ws2tcpip.h>
@@ -20,7 +20,8 @@
 #include "materials.h"
 #include "image_manager.h"
 #include "single_mode.h"
-#include "game.h"
+#include "game.h"
+#include "server_lobby.h"
 #include "replay.h"
 #include "replay_mode.h"
 #include "sound_manager.h"
@@ -363,6 +364,10 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 	case INTERNAL_HANDLE_CONNECTION_END: {
 		bool iseof = !!BufferIO::Read<uint8_t>(pdata);
 		mainGame->dInfo.isInLobby = false;
+		// quick match: the room we joined closed (or the connection failed) before the duel, search again
+		if(ServerLobby::quickMatchRole == ServerLobby::QM_GUEST && ServerLobby::quickMatchSession)
+			ServerLobby::quickMatchRestartPending = true;
+		ServerLobby::quickMatchRole = ServerLobby::QM_NONE;
 		if(connect_state == 0x1) {
 			temp_ver = 0;
 			std::lock_guard<epro::mutex> lock(mainGame->gMutex);
@@ -423,6 +428,8 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 					mainGame->ShowElement(mainGame->wLanWindow);
 				}
 				mainGame->SetMessageWindow();
+				if(ServerLobby::quickMatchSession && ServerLobby::quickMatchSearchNext)
+					ServerLobby::quickMatchRestartPending = true;
 			}
 		}
 		break;
@@ -460,7 +467,11 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 					[[fallthrough]];
 				case JoinError::JERR_REFUSED:	stringid--;
 			}
-			if(stringid < 1406)
+			if(ServerLobby::quickMatchRole == ServerLobby::QM_GUEST && ServerLobby::quickMatchSession) {
+				// quick match: the room is gone/full/refused, search again without popups
+				ServerLobby::quickMatchRole = ServerLobby::QM_NONE;
+				ServerLobby::quickMatchRestartPending = true;
+			} else if(stringid < 1406)
 				mainGame->PopupMessage(gDataManager->GetSysString(stringid));
 			connect_state |= 0x100;
 			event_base_loopbreak(client_base);
@@ -693,6 +704,7 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 		temp_ver = 0;
 		auto pkt = BufferIO::getStruct<STOC_JoinGame>(pdata, len);
 		mainGame->dInfo.isInLobby = true;
+		ServerLobby::quickMatchTypeChanged = false;
 		mainGame->dInfo.compat_mode = pkt.info.handshake != SERVER_HANDSHAKE;
 		mainGame->dInfo.legacy_race_size = mainGame->dInfo.compat_mode || (pkt.info.version.core.major < 10);
 		if(mainGame->dInfo.compat_mode) {
@@ -928,6 +940,7 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 		mainGame->dInfo.player_type = selftype;
 		mainGame->dInfo.isFirst = (mainGame->dInfo.player_type < mainGame->dInfo.team1) || (mainGame->dInfo.player_type >= 7);
 		mainGame->dInfo.isTeam1 = mainGame->dInfo.isFirst;
+		ServerLobby::quickMatchTypeChanged = true;
 		break;
 	}
 	case STOC_DUEL_START: {
@@ -939,6 +952,7 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 		mainGame->WaitFrameSignal(11, lock);
 		mainGame->dField.Clear();
 		mainGame->dInfo.isInLobby = false;
+		ServerLobby::quickMatchRole = ServerLobby::QM_NONE;
 		mainGame->is_siding = false;
 		mainGame->dInfo.checkRematch = false;
 		mainGame->dInfo.isInDuel = true;
@@ -1053,6 +1067,9 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 				mainGame->ShowElement(mainGame->wLanWindow);
 			}
 			mainGame->SetMessageWindow();
+			// "Search Next": the match is over, let the main loop start a new search
+			if(ServerLobby::quickMatchSession && ServerLobby::quickMatchSearchNext)
+				ServerLobby::quickMatchRestartPending = true;
 		}
 		connect_state |= 0x100;
 		event_base_loopbreak(client_base);
@@ -1199,6 +1216,13 @@ void DuelClient::HandleSTOCPacketLanAsync(const std::vector<uint8_t>& data) {
 		break;
 	}
 	case STOC_REMATCH: {
+		if(ServerLobby::quickMatchSession && ServerLobby::quickMatchSearchNext) {
+			// "Search Next": decline the rematch, the next opponent is searched when the match closes
+			CTOS_RematchResponse crr;
+			crr.rematch = false;
+			DuelClient::SendPacketToServer(CTOS_REMATCH_RESPONSE, crr);
+			break;
+		}
 		std::lock_guard<epro::mutex> lock(mainGame->gMutex);
 		mainGame->dInfo.checkRematch = true;
 		if(mainGame->wQuery->isVisible())
@@ -4682,3 +4706,4 @@ void DuelClient::ReplayPrompt(bool local_stream) {
 	}
 }
 }
+
