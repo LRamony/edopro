@@ -3,11 +3,26 @@
   lua.vcxproj -> D:\Projetos\edopro\bin\release\lua.lib
   ocgcore.vcxproj -> D:\Projetos\edopro\bin\release\ocgcore.lib
   Irrlicht.vcxproj -> D:\Projetos\edopro\bin\release\Irrlicht.lib
+  CGUICustomText.cpp
+  client_field.cpp
+  data_handler.cpp
+  deck_con.cpp
+  deck_manager.cpp
+  drawing.cpp
   duelclient.cpp
   event_handler.cpp
   game.cpp
+  game_config.cpp
+  gframe.cpp
+  image_downloader.cpp
+  image_manager.cpp
+D:\Projetos\edopro\gframe\image_manager.cpp(287,13): warning C4189: 'is_base': vari├ível local ├® inicializada mas n├úo referenciada [D:\Projetos\edopro\build\ygopro.vcxproj]
   menu_handler.cpp
+  repo_cloner.cpp
+  repo_manager.cpp
   server_lobby.cpp
+  single_mode.cpp
+  utils_gui.cpp
      Criando biblioteca D:\Projetos\edopro\build\..\bin\release\ygopro.lib e objeto D:\Projetos\edopro\build\..\bin\release\ygopro.exp
   Gerando c├│digo
 D:\Projetos\edopro\gframe\utils.cpp(234): warning C4702: c├│digo inacess├¡vel [D:\Projetos\edopro\build\ygopro.vcxproj]

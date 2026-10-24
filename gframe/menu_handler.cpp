@@ -342,10 +342,7 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 					ServerLobby::CancelQuickMatch();
 					break;
 				}
-				if(!gGameConfig->quickMatchStyle.empty()) {
-					ServerLobby::StartQuickMatch(gGameConfig->quickMatchStyle, gGameConfig->quickMatchSearchNext, static_cast<int>(gGameConfig->quickMatchTimeout));
-					break;
-				}
+				// always ask which game style to play
 				mainGame->cbQuickMatchStyle->clear();
 				for(const auto& style : ServerLobby::GetAvailableStyles())
 					mainGame->cbQuickMatchStyle->addItem(style.data());
@@ -366,14 +363,6 @@ bool MenuHandler::OnEvent(const irr::SEvent& event) {
 				const bool search_next = mainGame->chkQuickMatchSearchNext->isChecked();
 				mainGame->wQuickMatch->setVisible(false);
 				gGameConfig->quickMatchSearchNext = search_next;
-				// choosing the same style more than once makes it the default (the popup is not shown anymore)
-				if(gGameConfig->quickMatchLastChoice == style) {
-					if(++gGameConfig->quickMatchChoiceCount >= 2)
-						gGameConfig->quickMatchStyle = style;
-				} else {
-					gGameConfig->quickMatchLastChoice = style;
-					gGameConfig->quickMatchChoiceCount = 1;
-				}
 				ServerLobby::StartQuickMatch(style, search_next, static_cast<int>(gGameConfig->quickMatchTimeout));
 				break;
 			}
