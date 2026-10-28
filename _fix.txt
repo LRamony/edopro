@@ -1,0 +1,8 @@
+if(gGameConfig->autoSaveReplay || mainGame->saveReplay || !is_local_host) {
+		if(gGameConfig->autoSaveReplay && !mainGame->saveReplay && is_local_host) {
+		\t// will handle below logic differently
+		}
+		if(mainGame->saveReplay || (gGameConfig->autoSaveReplay && is_local_host))
+			last_replay.SaveReplay(Utils::ToPathString(mainGame->ebFileSaveName->getText()));
+		else last_replay.SaveReplay(EPRO_TEXT("_LastReplay"));
+	}

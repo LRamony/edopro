@@ -1,0 +1,10 @@
+Versão do MSBuild 18.11.1-1.26513.3+940033be3 para .NET Framework
+Algumas opções de linha de comando foram lidas deste arquivo de resposta:
+  C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.rsp
+MSBUILD : error MSB1008: Somente um projeto pode ser especificado.
+    Linha de comando completa: 'msbuild "D:\Projetos\edopro\build\ygopro.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal " '
+  Comutadores acrescentados por arquivos de resposta:
+'' proveniente de 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.rsp'
+Opção:  
+
+Para obter a sintaxe da opção, digite "MSBuild -help"

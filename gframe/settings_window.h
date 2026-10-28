@@ -69,6 +69,7 @@ struct SettingsWindow {
 	irr::gui::IGUICheckBox* chkUpdates;
 	irr::gui::IGUICheckBox* chkFilterBot;
 	irr::gui::IGUICheckBox* chkHideHandsInReplays;
+	irr::gui::IGUICheckBox* chkAutoSaveReplay;
 	irr::gui::IGUICheckBox* chkConfirmDeckClear;
 	irr::gui::IGUICheckBox* chkIgnoreDeckContents;
 	irr::gui::IGUICheckBox* chkAddCardNamesInDeckList;

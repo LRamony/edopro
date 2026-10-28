@@ -6,7 +6,8 @@
 #include "client_card.h"
 #include "math.h"
 #include "network.h"
-#include "game.h"
+#include "game.h"
+
 #include "server_lobby.h"
 #include "duelclient.h"
 #include "data_manager.h"
@@ -2090,6 +2091,10 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 #endif
 			case CHECKBOX_HIDE_HANDS_REPLAY: {
 				gGameConfig->hideHandsInReplays = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
+				break;
+			}
+			case CHECKBOX_AUTO_SAVE_REPLAY: {
+				gGameConfig->autoSaveReplay = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
 				break;
 			}
 			case CHECKBOX_TOPDOWN: {

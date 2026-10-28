@@ -6,6 +6,8 @@
 #include "sound_manager.h"
 #include "fmt.h"
 #include "localtime.h"
+#include "utils.h"
+#include "replay.h"
 #include "CGUIFileSelectListBox/CGUIFileSelectListBox.h"
 #include <IrrlichtDevice.h>
 #include <IGUIWindow.h>
@@ -104,7 +106,7 @@ restart:
 	mainGame->dInfo.player_type = 0;
 	mainGame->dInfo.turn = 0;
 	bool loaded = true;
-	bool saveReplay = !hand_test || gGameConfig->saveHandTest;
+	bool saveReplay = !hand_test || gGameConfig->saveHandTest || gGameConfig->autoSaveReplay;
 	if(saveReplay) {
 		auto replay_header = ExtendedReplayHeader::CreateDefaultHeader(REPLAY_YRP1, static_cast<uint32_t>(time(nullptr)));
 		replay_header.SetSeed(seed);
@@ -267,10 +269,64 @@ restart:
 	if(saveReplay && !was_restarting) {
 		auto now = std::time(nullptr);
 		std::unique_lock<epro::mutex> lock(mainGame->gMutex);
-		mainGame->PopupSaveWindow(gDataManager->GetSysString(1340), epro::format(L"{:%Y-%m-%d %H-%M-%S}", epro::localtime(now)), gDataManager->GetSysString(1342));
-		mainGame->replaySignal.Wait(lock);
-		if(mainGame->saveReplay)
-			new_replay.SaveReplay(Utils::ToPathString(mainGame->ebFileSaveName->getText()));
+		if(gGameConfig->autoSaveReplay) {
+			epro::path_string p1name;
+			epro::path_string p2name;
+			if(!mainGame->dInfo.selfnames.empty())
+				p1name = Utils::ToPathString(mainGame->dInfo.selfnames[0]);
+			else
+				p1name = EPRO_TEXT("Player1");
+			if(!mainGame->dInfo.opponames.empty())
+				p2name = Utils::ToPathString(mainGame->dInfo.opponames[0]);
+			else
+				p2name = EPRO_TEXT("Player2");
+			if(mainGame->dInfo.winner == 0 || mainGame->dInfo.winner == 1) {
+				const bool selfWon = (mainGame->dInfo.winner == 0) == mainGame->dInfo.isTeam1;
+				if(selfWon)
+					p1name += EPRO_TEXT("WIN");
+				else
+					p2name += EPRO_TEXT("WIN");
+			}
+			epro::path_string baseName = epro::format(EPRO_TEXT("{} vs {}"), p1name, p2name);
+			// sanitize and make unique
+			epro::path_string sanitized = baseName;
+			const epro::path_char invalid[] = EPRO_TEXT("\\/:*?\"<>|");
+			for(size_t i = 0; i < sanitized.size(); ++i) {
+				for(size_t j = 0; invalid[j] != 0; ++j) {
+					if(sanitized[i] == invalid[j]) {
+						sanitized[i] = EPRO_TEXT('_');
+						break;
+					}
+				}
+				if(sanitized[i] < 32)
+					sanitized[i] = EPRO_TEXT('_');
+			}
+			if(sanitized.empty())
+				sanitized = EPRO_TEXT("Replay");
+			epro::path_string finalName = sanitized;
+			epro::path_string replay_path = Replay::GetReplayFilePath(epro::format(EPRO_TEXT("{}.yrpX"), finalName));
+			if(Utils::FileExists(replay_path)) {
+				int counter = 1;
+				while(true) {
+					epro::path_string candidate = epro::format(EPRO_TEXT("{} ({})"), sanitized, counter);
+					replay_path = Replay::GetReplayFilePath(epro::format(EPRO_TEXT("{}.yrpX"), candidate));
+					if(!Utils::FileExists(replay_path)) {
+						finalName = candidate;
+						break;
+					}
+					++counter;
+					if(counter > 9999)
+						break;
+				}
+			}
+			new_replay.SaveReplay(finalName);
+		} else {
+			mainGame->saveReplay = false;
+			mainGame->PopupSaveWindow(gDataManager->GetSysString(1340), epro::format(L"{:%Y-%m-%d %H-%M-%S}", epro::localtime(now)), gDataManager->GetSysString(1342));
+			mainGame->replaySignal.Wait(lock);
+			if(mainGame->saveReplay)
+				new_replay.SaveReplay(Utils::ToPathString(mainGame->ebFileSaveName->getText()));
+		}
 	}
 	new_replay.Reset();
 	last_replay.Reset();

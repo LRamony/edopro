@@ -1,3 +1,4 @@
+#include <cstdint>
 #ifndef GAME_H
 #define GAME_H
 
@@ -95,6 +96,7 @@ struct DuelInfo {
 	std::vector<std::wstring> opponames;
 	std::wstring strLP[2];
 	std::wstring vic_string;
+	int8_t winner = -1;
 	uint8_t player_type;
 	uint8_t time_player;
 	uint16_t time_limit;
@@ -854,3 +856,4 @@ constexpr float CAMERA_BOTTOM = -0.42f;
 constexpr float CAMERA_TOP = 0.42f;
 
 #endif // GAME_H
+

@@ -120,3 +120,4 @@ OPTION(bool, quickMatchSearchNext, false)
 OPTION(bool, native_keyboard, false)
 OPTION(bool, native_mouse, false)
 #endif
+OPTION(bool, autoSaveReplay, false)

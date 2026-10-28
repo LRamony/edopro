@@ -1,4 +1,4 @@
-﻿#include <algorithm>
+#include <algorithm>
 #include "config.h"
 #if EDOPRO_WINDOWS
 #include <ws2tcpip.h>
@@ -20,7 +20,8 @@
 #include "materials.h"
 #include "image_manager.h"
 #include "single_mode.h"
-#include "game.h"
+#include "game.h"
+
 #include "server_lobby.h"
 #include "replay.h"
 #include "replay_mode.h"
@@ -1641,10 +1642,14 @@ int DuelClient::ClientAnalyze(const uint8_t* msg, uint32_t len) {
 		mainGame->showcarddif = 110;
 		mainGame->showcardp = 0;
 		mainGame->dInfo.vic_string = L"";
+		mainGame->dInfo.winner = -1;
+		mainGame->dInfo.winner = -1;
 		mainGame->showcardcode = 3;
 		std::wstring formatted_string = L"";
 		if(player < 2) {
+			uint8_t orig_winner = player;
 			player = mainGame->LocalPlayer(player);
+			mainGame->dInfo.winner = orig_winner;
 			mainGame->showcardcode = player + 1;
 			if(match_kill)
 				mainGame->dInfo.vic_string = epro::sprintf(gDataManager->GetVictoryString(0x20), gDataManager->GetName(match_kill));
@@ -4668,6 +4673,43 @@ void DuelClient::BroadcastReply(evutil_socket_t fd, short events, void* arg) {
 		}
 	}
 }
+static epro::path_string SanitizeReplayName(const epro::path_string& name) {
+	epro::path_string sanitized = name;
+	const epro::path_char invalid[] = EPRO_TEXT("\\/:*?\"<>|");
+	for(size_t i = 0; i < sanitized.size(); ++i) {
+		for(size_t j = 0; invalid[j] != 0; ++j) {
+			if(sanitized[i] == invalid[j]) {
+				sanitized[i] = EPRO_TEXT('_');
+				break;
+			}
+		}
+		if(sanitized[i] < 32)
+			sanitized[i] = EPRO_TEXT('_');
+	}
+	if(sanitized.empty())
+		sanitized = EPRO_TEXT("Replay");
+	return sanitized;
+}
+
+static epro::path_string GetUniqueReplayName(const epro::path_string& baseName) {
+	epro::path_string sanitized = SanitizeReplayName(baseName);
+	epro::path_string replay_path = Replay::GetReplayFilePath(epro::format(EPRO_TEXT("{}.yrpX"), sanitized));
+	if(!Utils::FileExists(replay_path)) {
+		return sanitized;
+	}
+	int counter = 1;
+	while(true) {
+		epro::path_string candidate = epro::format(EPRO_TEXT("{} ({})"), sanitized, counter);
+		replay_path = Replay::GetReplayFilePath(epro::format(EPRO_TEXT("{}.yrpX"), candidate));
+		if(!Utils::FileExists(replay_path)) {
+			return candidate;
+		}
+		++counter;
+		if(counter > 9999)
+			return sanitized;
+	}
+}
+
 void DuelClient::ReplayPrompt(bool local_stream) {
 	if(local_stream) {
 		auto replay_header = ExtendedReplayHeader::CreateDefaultHeader(REPLAY_YRPX, static_cast<uint32_t>(time(0)));
@@ -4697,13 +4739,38 @@ void DuelClient::ReplayPrompt(bool local_stream) {
 	mainGame->btnChainWhenAvail->setVisible(false);
 	mainGame->btnCancelOrFinish->setVisible(false);
 	auto now = std::time(nullptr);
-	mainGame->PopupSaveWindow(gDataManager->GetSysString(1340), epro::format(L"{:%Y-%m-%d %H-%M-%S}", epro::localtime(now)), gDataManager->GetSysString(1342));
-	mainGame->replaySignal.Wait(lock);
-	if(mainGame->saveReplay || !is_local_host) {
+	const bool autoSaveReplay = gGameConfig->autoSaveReplay;
+	if(!autoSaveReplay) {
+		mainGame->saveReplay = false;
+		mainGame->PopupSaveWindow(gDataManager->GetSysString(1340), epro::format(L"{:%Y-%m-%d %H-%M-%S}", epro::localtime(now)), gDataManager->GetSysString(1342));
+		mainGame->replaySignal.Wait(lock);
+	}
+	if(autoSaveReplay) {
+		epro::path_string p1name;
+		epro::path_string p2name;
+		if(!mainGame->dInfo.selfnames.empty())
+			p1name = Utils::ToPathString(mainGame->dInfo.selfnames[0]);
+		else
+			p1name = EPRO_TEXT("Player1");
+		if(!mainGame->dInfo.opponames.empty())
+			p2name = Utils::ToPathString(mainGame->dInfo.opponames[0]);
+		else
+			p2name = EPRO_TEXT("Player2");
+		if(mainGame->dInfo.winner == 0 || mainGame->dInfo.winner == 1) {
+			const bool selfWon = (mainGame->dInfo.winner == 0) == mainGame->dInfo.isTeam1;
+			if(selfWon)
+				p1name += EPRO_TEXT("WIN");
+			else
+				p2name += EPRO_TEXT("WIN");
+		}
+		epro::path_string baseName = epro::format(EPRO_TEXT("{} vs {}"), p1name, p2name);
+		epro::path_string uniqueName = GetUniqueReplayName(baseName);
+		last_replay.SaveReplay(uniqueName);
+	} else if(mainGame->saveReplay || !is_local_host) {
 		if(mainGame->saveReplay)
 			last_replay.SaveReplay(Utils::ToPathString(mainGame->ebFileSaveName->getText()));
-		else last_replay.SaveReplay(EPRO_TEXT("_LastReplay"));
+		else
+			last_replay.SaveReplay(EPRO_TEXT("_LastReplay"));
 	}
 }
 }
-
