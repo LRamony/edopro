@@ -121,3 +121,4 @@ OPTION(bool, native_keyboard, false)
 OPTION(bool, native_mouse, false)
 #endif
 OPTION(bool, autoSaveReplay, false)
+OPTION(float, replaySpeed, 1.0f)

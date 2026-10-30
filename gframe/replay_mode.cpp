@@ -6,6 +6,7 @@
 #include "game.h"
 #include "single_mode.h"
 #include "sound_manager.h"
+#include "game_config.h"
 
 namespace ygo {
 
@@ -24,6 +25,7 @@ int ReplayMode::skip_turn = 0;
 int ReplayMode::current_step = 0;
 int ReplayMode::skip_step = 0;
 epro::thread ReplayMode::replay_thread;
+float ReplayMode::replay_speed = 1.0f;
 
 bool ReplayMode::StartReplay(int skipturn, bool is_yrp) {
 	if(mainGame->dInfo.isReplay)
@@ -36,6 +38,11 @@ bool ReplayMode::StartReplay(int skipturn, bool is_yrp) {
 	is_pausing = false;
 	is_paused = false;
 	is_restarting = false;
+	replay_speed = gGameConfig->replaySpeed;
+	if(replay_speed < 0.25f)
+		replay_speed = 0.25f;
+	else if(replay_speed > 2.0f)
+		replay_speed = 2.0f;
 	if(replay_thread.joinable())
 		replay_thread.join();
 	if(is_yrp) {
@@ -118,6 +125,40 @@ int ReplayMode::ReplayThread() {
 	if(mainGame->dInfo.isCatchingUp)
 		mainGame->gMutex.lock();
 	for(auto it = current_stream.begin(); is_continuing && !exit_pending && it != current_stream.end();) {
+		bool was_pauseable = false;
+		{
+			// Check if this packet is pauseable before analyzing
+			uint8_t msg = (*it).message;
+			switch(msg) {
+			case MSG_START:
+			case MSG_UPDATE_DATA:
+			case MSG_UPDATE_CARD:
+			case MSG_SET:
+			case MSG_SWAP:
+			case MSG_FIELD_DISABLED:
+			case MSG_SUMMONING:
+			case MSG_SPSUMMONING:
+			case MSG_FLIPSUMMONING:
+			case MSG_CHAIN_SOLVING:
+			case MSG_CHAIN_SOLVED:
+			case MSG_CHAIN_END:
+			case MSG_RANDOM_SELECTED:
+			case MSG_EQUIP:
+			case MSG_UNEQUIP:
+			case MSG_CARD_TARGET:
+			case MSG_CANCEL_TARGET:
+			case MSG_BATTLE:
+			case MSG_ATTACK_DISABLED:
+			case MSG_DAMAGE_STEP_START:
+			case MSG_DAMAGE_STEP_END:
+			case MSG_TAG_SWAP:
+			case MSG_RELOAD_FIELD:
+				break;
+			default:
+				was_pauseable = true;
+				break;
+			}
+		}
 		is_continuing = ReplayAnalyze((*it));
 		if(is_restarting) {
 			mainGame->gMutex.lock();
@@ -137,8 +178,16 @@ int ReplayMode::ReplayThread() {
 			}
 			skip_step = step;
 			current_step = 0;
-		} else
+		} else {
 			it++;
+			// Add delay based on replay speed for pauseable packets
+			if(was_pauseable && replay_speed > 0.0f && !is_pausing) {
+				int base_delay = 16; // ~60fps base
+				int delay = static_cast<int>(base_delay / replay_speed);
+				if(delay > 0)
+					epro::this_thread::sleep_for(std::chrono::milliseconds(delay));
+			}
+		}
 	}
 	if(mainGame->dInfo.isCatchingUp) {
 		mainGame->dInfo.isCatchingUp = false;

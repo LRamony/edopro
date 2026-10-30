@@ -178,6 +178,7 @@ static void LoadReplay() {
 	mainGame->btnReplayPause->setVisible(true);
 	mainGame->btnReplayStep->setVisible(false);
 	mainGame->btnReplayUndo->setVisible(false);
+	mainGame->UpdateReplaySpeedDisplay();
 	mainGame->wPhase->setVisible(true);
 	mainGame->dField.Clear();
 	mainGame->HideElement(mainGame->wReplay);

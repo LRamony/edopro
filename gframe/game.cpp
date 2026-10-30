@@ -827,19 +827,29 @@ void Game::Initialize() {
 	btnFileSaveNo = env->addButton(Scale(170, 80, 240, 105), wFileSave, BUTTON_FILE_CANCEL, gDataManager->GetSysString(1212).data());
 	defaultStrings.emplace_back(btnFileSaveNo, 1212);
 	//replay control
-	wReplayControl = AlignElementWithParent(env->addStaticText(L"", Scale(205, 143, 295, 273), true, false, 0, -1, true));
+	//the panel was extended upwards so that the speed controls sit above the other
+	//buttons instead of below them (where they would overlap the rest of the UI)
+	wReplayControl = AlignElementWithParent(env->addStaticText(L"", Scale(205, 93, 295, 273), true, false, 0, -1, true));
 	wReplayControl->setVisible(false);
-	btnReplayStart = AlignElementWithParent(env->addButton(Scale(5, 5, 85, 25), wReplayControl, BUTTON_REPLAY_START, gDataManager->GetSysString(1343).data()));
+	//replay speed controls
+	btnReplaySpeedDown = AlignElementWithParent(env->addButton(Scale(5, 5, 25, 25), wReplayControl, BUTTON_REPLAY_SPEED_DOWN, L"-"));
+	btnReplaySpeedUp = AlignElementWithParent(env->addButton(Scale(65, 5, 85, 25), wReplayControl, BUTTON_REPLAY_SPEED_UP, L"+"));
+	stReplaySpeed = AlignElementWithParent(env->addStaticText(L"1.00x", Scale(25, 5, 65, 25), false, false, wReplayControl));
+	stReplaySpeed->setTextAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER);
+	btnReplaySpeedReset = AlignElementWithParent(env->addButton(Scale(5, 30, 85, 50), wReplayControl, BUTTON_REPLAY_SPEED_RESET, gDataManager->GetSysString(1162).data()));
+	defaultStrings.emplace_back(btnReplaySpeedReset, 1162);
+	UpdateReplaySpeedDisplay();
+	btnReplayStart = AlignElementWithParent(env->addButton(Scale(5, 55, 85, 75), wReplayControl, BUTTON_REPLAY_START, gDataManager->GetSysString(1343).data()));
 	defaultStrings.emplace_back(btnReplayStart, 1343);
-	btnReplayPause = AlignElementWithParent(env->addButton(Scale(5, 5, 85, 25), wReplayControl, BUTTON_REPLAY_PAUSE, gDataManager->GetSysString(1344).data()));
+	btnReplayPause = AlignElementWithParent(env->addButton(Scale(5, 55, 85, 75), wReplayControl, BUTTON_REPLAY_PAUSE, gDataManager->GetSysString(1344).data()));
 	defaultStrings.emplace_back(btnReplayPause, 1344);
-	btnReplayStep = AlignElementWithParent(env->addButton(Scale(5, 55, 85, 75), wReplayControl, BUTTON_REPLAY_STEP, gDataManager->GetSysString(1345).data()));
-	defaultStrings.emplace_back(btnReplayStep, 1345);
-	btnReplayUndo = AlignElementWithParent(env->addButton(Scale(5, 80, 85, 100), wReplayControl, BUTTON_REPLAY_UNDO, gDataManager->GetSysString(1360).data()));
-	defaultStrings.emplace_back(btnReplayUndo, 1360);
-	btnReplaySwap = AlignElementWithParent(env->addButton(Scale(5, 30, 85, 50), wReplayControl, BUTTON_REPLAY_SWAP, gDataManager->GetSysString(1346).data()));
+	btnReplaySwap = AlignElementWithParent(env->addButton(Scale(5, 80, 85, 100), wReplayControl, BUTTON_REPLAY_SWAP, gDataManager->GetSysString(1346).data()));
 	defaultStrings.emplace_back(btnReplaySwap, 1346);
-	btnReplayExit = AlignElementWithParent(env->addButton(Scale(5, 105, 85, 125), wReplayControl, BUTTON_REPLAY_EXIT, gDataManager->GetSysString(1347).data()));
+	btnReplayStep = AlignElementWithParent(env->addButton(Scale(5, 105, 85, 125), wReplayControl, BUTTON_REPLAY_STEP, gDataManager->GetSysString(1345).data()));
+	defaultStrings.emplace_back(btnReplayStep, 1345);
+	btnReplayUndo = AlignElementWithParent(env->addButton(Scale(5, 130, 85, 150), wReplayControl, BUTTON_REPLAY_UNDO, gDataManager->GetSysString(1360).data()));
+	defaultStrings.emplace_back(btnReplayUndo, 1360);
+	btnReplayExit = AlignElementWithParent(env->addButton(Scale(5, 155, 85, 175), wReplayControl, BUTTON_REPLAY_EXIT, gDataManager->GetSysString(1347).data()));
 	defaultStrings.emplace_back(btnReplayExit, 1347);
 	//chat
 	wChat = AlignElementWithParent(env->addWindow(Scale(305, 615, 1020, 640), false, L""));
@@ -1688,6 +1698,16 @@ void Game::PopulateSettingsWindow() {
 		gSettings.chkHideHandsInReplays = env->addCheckBox(gGameConfig->hideHandsInReplays, GetNextRect(), sPanel, CHECKBOX_HIDE_HANDS_REPLAY, gDataManager->GetSysString(2080).data());
 		defaultStrings.emplace_back(gSettings.chkHideHandsInReplays, 2080);
 		gSettings.chkAutoSaveReplay = env->addCheckBox(gGameConfig->autoSaveReplay, GetNextRect(), sPanel, CHECKBOX_AUTO_SAVE_REPLAY, L"Salvar replays automaticamente");
+		{
+			gSettings.stReplaySpeed = env->addStaticText(L"Velocidade do replay:", GetCurrentRectWithXOffset(15, 125), false, false, sPanel);
+			gSettings.btnReplaySpeedDown = env->addButton(GetCurrentRectWithXOffset(128, 150), sPanel, BUTTON_SETTINGS_REPLAY_SPEED_DOWN, L"-");
+			gSettings.ebReplaySpeed = env->addEditBox(epro::format(L"{:.2f}", gGameConfig->replaySpeed).c_str(), GetCurrentRectWithXOffset(155, 220), true, sPanel, EDITBOX_REPLAY_SPEED);
+			gSettings.ebReplaySpeed->setTextAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER);
+			gSettings.btnReplaySpeedUp = env->addButton(GetCurrentRectWithXOffset(225, 247), sPanel, BUTTON_SETTINGS_REPLAY_SPEED_UP, L"+");
+			gSettings.btnReplaySpeedReset = env->addButton(GetCurrentRectWithXOffset(252, 320), sPanel, BUTTON_SETTINGS_REPLAY_SPEED_RESET, gDataManager->GetSysString(1162).data());
+			defaultStrings.emplace_back(gSettings.btnReplaySpeedReset, 1162);
+			IncrementXorY();
+		}
 		gSettings.chkConfirmDeckClear = env->addCheckBox(gGameConfig->confirm_clear_deck, GetNextRect(), sPanel, CHECKBOX_CONFIRM_DECK_CLEAR, gDataManager->GetSysString(12104).data());
 		defaultStrings.emplace_back(gSettings.chkConfirmDeckClear, 12104);
 		gSettings.chkIgnoreDeckContents = env->addCheckBox(gGameConfig->ignoreDeckContents, GetNextRect(), sPanel, CHECKBOX_IGNORE_DECK_CONTENTS, gDataManager->GetSysString(12119).data());
@@ -3414,6 +3434,21 @@ void Game::RefreshUICoreVersion() {
 	auto w1 = stVersion->getTextWidth();
 	auto w2 = stCoreVersion->getTextWidth();
 	wVersion->setRelativePosition(irr::core::recti(0, 0, Scale(20) + std::max({ Scale(280), w1, w2 }), Scale(135)));
+}
+void Game::SetReplaySpeed(float speed) {
+	if(speed < 0.25f)
+		speed = 0.25f;
+	else if(speed > 2.0f)
+		speed = 2.0f;
+	gGameConfig->replaySpeed = speed;
+	ReplayMode::SetReplaySpeed(speed);
+	UpdateReplaySpeedDisplay();
+	if(gSettings.ebReplaySpeed)
+		gSettings.ebReplaySpeed->setText(epro::format(L"{:.2f}", speed).c_str());
+}
+void Game::UpdateReplaySpeedDisplay() {
+	if(stReplaySpeed)
+		stReplaySpeed->setText(epro::format(L"{:.2f}x", gGameConfig->replaySpeed).c_str());
 }
 std::wstring Game::GetLocalizedExpectedCore() {
 	return epro::format(gDataManager->GetSysString(2011), Core::EXPECTED_VERSION_MAJOR, Core::EXPECTED_VERSION_MINOR);

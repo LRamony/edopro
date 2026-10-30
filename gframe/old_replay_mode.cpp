@@ -4,6 +4,7 @@
 #include "game.h"
 #include "single_mode.h"
 #include "fmt.h"
+#include "game_config.h"
 
 namespace ygo {
 	bool ReplayMode::ReadReplayResponse() {
@@ -60,6 +61,11 @@ namespace ygo {
 		}
 		exit_pending = false;
 		current_step = 0;
+		replay_speed = gGameConfig->replaySpeed;
+		if(replay_speed < 0.25f)
+			replay_speed = 0.25f;
+		else if(replay_speed > 2.0f)
+			replay_speed = 2.0f;
 		if (mainGame->dInfo.isCatchingUp)
 			mainGame->gMutex.lock();
 		while(is_continuing && !exit_pending) {
@@ -95,6 +101,13 @@ namespace ygo {
 				}
 				skip_step = step;
 				current_step = 0;
+			}
+			// Add delay based on replay speed
+			if(replay_speed > 0.0f && !is_pausing) {
+				int base_delay = 16; // ~60fps base
+				int delay = static_cast<int>(base_delay / replay_speed);
+				if(delay > 0)
+					epro::this_thread::sleep_for(std::chrono::milliseconds(delay));
 			}
 		}
 		if (mainGame->dInfo.isCatchingUp) {

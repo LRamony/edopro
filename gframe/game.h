@@ -501,6 +501,10 @@ struct game_field_elements {
 	irr::gui::IGUIButton* btnReplayUndo;
 	irr::gui::IGUIButton* btnReplayExit;
 	irr::gui::IGUIButton* btnReplaySwap;
+	irr::gui::IGUIButton* btnReplaySpeedDown;
+	irr::gui::IGUIButton* btnReplaySpeedUp;
+	irr::gui::IGUIButton* btnReplaySpeedReset;
+	irr::gui::IGUIStaticText* stReplaySpeed;
 	//surrender/leave
 	irr::gui::IGUIButton* btnLeaveGame;
 	//restart
@@ -596,6 +600,8 @@ public:
 	bool HasFocus(irr::gui::EGUI_ELEMENT_TYPE type) const;
 
 	void RefreshUICoreVersion();
+	void SetReplaySpeed(float speed);
+	void UpdateReplaySpeedDisplay();
 	std::wstring GetLocalizedExpectedCore();
 	std::wstring GetLocalizedCompatVersion();
 	void ReloadCBSortType();

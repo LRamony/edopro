@@ -28,6 +28,7 @@ private:
 	static int current_step;
 	static int skip_step;
 	static epro::thread replay_thread;
+	static float replay_speed;
 
 public:
 	static Replay cur_replay;
@@ -52,6 +53,13 @@ public:
 	static void ReplayRefresh(uint32_t flag = 0x2f81fff);
 	static void ReplayRefreshSingle(uint8_t player, uint8_t location, uint32_t sequence, uint32_t flag = 0x2f81fff);
 	static void ReplayReload();
+
+	static float GetReplaySpeed() { return replay_speed; }
+	static void SetReplaySpeed(float speed) {
+		if(speed < 0.25f) speed = 0.25f;
+		else if(speed > 2.0f) speed = 2.0f;
+		replay_speed = speed;
+	}
 };
 
 }

@@ -9,6 +9,7 @@
 #include "CGUIImageButton/CGUIImageButton.h"
 #include "custom_skin_enum.h"
 #include "image_manager.h"
+#include "replay_mode.h"
 #include "fmt.h"
 
 namespace ygo {
@@ -1176,7 +1177,15 @@ void Game::PopupElement(irr::gui::IGUIElement * element, int hideframe) {
 	else ShowElement(element, hideframe);
 }
 void Game::WaitFrameSignal(int frame, std::unique_lock<epro::mutex>& _lck) {
-	signalFrame = (gGameConfig->quick_animation && frame >= 12) ? 12 * 1000 / 60 : frame * 1000 / 60;
+	int duration = (gGameConfig->quick_animation && frame >= 12) ? 12 * 1000 / 60 : frame * 1000 / 60;
+	// In replays the waiting time is what actually paces the playback, so scale
+	// it with the configured replay speed (while catching up we keep full speed).
+	if(dInfo.isReplay && !dInfo.isCatchingUp) {
+		const float speed = ReplayMode::GetReplaySpeed();
+		if(speed > 0.0f)
+			duration = static_cast<int>(duration / speed);
+	}
+	signalFrame = duration;
 	frameSignal.Wait(_lck);
 }
 void Game::DrawThumb(const CardDataC* cp, irr::core::vector2di pos, LFList* lflist, bool drag, const irr::core::recti* cliprect, bool load_image) {

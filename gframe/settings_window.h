@@ -90,6 +90,11 @@ struct SettingsWindow {
 	irr::gui::IGUICheckBox* chkRandomPos;
 	irr::gui::IGUICheckBox* chkNoChainDelay;
 	irr::gui::IGUICheckBox* chkAutoRPS;
+	irr::gui::IGUIStaticText* stReplaySpeed;
+	irr::gui::IGUIEditBox* ebReplaySpeed;
+	irr::gui::IGUIButton* btnReplaySpeedDown;
+	irr::gui::IGUIButton* btnReplaySpeedUp;
+	irr::gui::IGUIButton* btnReplaySpeedReset;
 
 	SettingsTab sound;
 	irr::gui::IGUICheckBox* chkEnableSound;

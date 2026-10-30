@@ -1,4 +1,4 @@
-﻿#include <algorithm>
+#include <algorithm>
 #include <cassert>
 #include "utils.h"
 #include "game_config.h"
@@ -44,6 +44,16 @@
 #include "fmt.h"
 
 namespace {
+
+inline float ParseReplaySpeed(const wchar_t* text, float fallback) {
+	try {
+		std::wstring value(text);
+		std::replace(value.begin(), value.end(), L',', L'.');
+		return std::stof(value);
+	} catch(...) {
+		return fallback;
+	}
+}
 
 #if EDOPRO_ANDROID || EDOPRO_IOS
 inline bool TransformEvent(const irr::SEvent& event, bool& stopPropagation) {
@@ -128,6 +138,24 @@ bool ClientField::OnEvent(const irr::SEvent& event) {
 				if(!mainGame->dInfo.isReplay)
 					break;
 				ReplayMode::Undo();
+				break;
+			}
+			case BUTTON_REPLAY_SPEED_DOWN: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				mainGame->SetReplaySpeed(gGameConfig->replaySpeed - 0.25f);
+				break;
+			}
+			case BUTTON_REPLAY_SPEED_UP: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				mainGame->SetReplaySpeed(gGameConfig->replaySpeed + 0.25f);
+				break;
+			}
+			case BUTTON_REPLAY_SPEED_RESET: {
+				if(!mainGame->dInfo.isReplay)
+					break;
+				mainGame->SetReplaySpeed(1.0f);
 				break;
 			}
 			case BUTTON_FILE_SAVE: {
@@ -1843,6 +1871,8 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 		case irr::gui::EGET_ELEMENT_CLOSED: {
 			if(event.GUIEvent.Caller == mainGame->gSettings.window) {
 				stopPropagation = true;
+				if(mainGame->gSettings.ebReplaySpeed)
+					mainGame->SetReplaySpeed(ParseReplaySpeed(mainGame->gSettings.ebReplaySpeed->getText(), gGameConfig->replaySpeed));
 				mainGame->HideElement(event.GUIEvent.Caller);
 				return true;
 			}
@@ -1924,6 +1954,18 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 				} catch (...) {
 					mainGame->gSettings.ebFPSCap->setText(epro::to_wstring(gGameConfig->maxFPS).data());
 				}
+				break;
+			}
+			case BUTTON_SETTINGS_REPLAY_SPEED_DOWN: {
+				mainGame->SetReplaySpeed(gGameConfig->replaySpeed - 0.25f);
+				break;
+			}
+			case BUTTON_SETTINGS_REPLAY_SPEED_UP: {
+				mainGame->SetReplaySpeed(gGameConfig->replaySpeed + 0.25f);
+				break;
+			}
+			case BUTTON_SETTINGS_REPLAY_SPEED_RESET: {
+				mainGame->SetReplaySpeed(1.0f);
 				break;
 			}
 			}
@@ -2128,6 +2170,10 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 				}
 				return true;
 			}
+			case EDITBOX_REPLAY_SPEED: {
+				mainGame->SetReplaySpeed(ParseReplaySpeed(event.GUIEvent.Caller->getText(), gGameConfig->replaySpeed));
+				break;
+			}
 			}
 			break;
 		}
@@ -2137,6 +2183,22 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 				std::wstring tmp(event.GUIEvent.Caller->getText());
 				if(Utils::KeepOnlyDigits(tmp))
 					event.GUIEvent.Caller->setText(tmp.data());
+				break;
+			}
+			case EDITBOX_REPLAY_SPEED: {
+				std::wstring tmp(event.GUIEvent.Caller->getText());
+				std::wstring filtered;
+				bool has_separator = false;
+				for(auto c : tmp) {
+					if(c >= L'0' && c <= L'9')
+						filtered += c;
+					else if((c == L'.' || c == L',') && !has_separator) {
+						filtered += L'.';
+						has_separator = true;
+					}
+				}
+				if(filtered != tmp)
+					event.GUIEvent.Caller->setText(filtered.c_str());
 				break;
 			}
 			case EDITBOX_FPS_CAP: {
