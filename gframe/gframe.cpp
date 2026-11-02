@@ -33,6 +33,7 @@ ygo::GameConfig* ygo::gGameConfig = nullptr;
 ygo::RepoManager* ygo::gRepoManager = nullptr;
 ygo::DeckManager* ygo::gdeckManager = nullptr;
 ygo::ClientUpdater* ygo::gClientUpdater = nullptr;
+std::unique_ptr<ygo::TranslationManager> ygo::gTranslationManager = nullptr;
 JWrapper* gJWrapper = nullptr;
 
 namespace {

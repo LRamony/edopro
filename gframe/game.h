@@ -23,6 +23,7 @@
 #include "windbot_panel.h"
 #include "ocgapi_types.h"
 #include "dllinterface.h"
+#include "translation_manager.h"
 
 struct unzip_payload;
 class CGUISkinSystem;
@@ -862,4 +863,3 @@ constexpr float CAMERA_BOTTOM = -0.42f;
 constexpr float CAMERA_TOP = 0.42f;
 
 #endif // GAME_H
-

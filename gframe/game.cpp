@@ -39,6 +39,7 @@
 #include "file_stream.h"
 #include "porting.h"
 #include "fmt.h"
+#include "translation_manager.h"
 
 #if EDOPRO_ANDROID || EDOPRO_IOS
 #include "CGUICustomComboBox/CGUICustomComboBox.h"
@@ -1679,6 +1680,25 @@ void Game::PopulateSettingsWindow() {
 			gSettings.cbCurrentLocale->setSelected(selectedLocale);
 			IncrementXorY();
 		}
+		
+		// Translation settings
+		{
+			gSettings.stTranslation = env->addStaticText(L"Tradução Automática de Cartas:", GetCurrentRectWithXOffset(15, 90), false, true, sPanel);
+			IncrementXorY();
+			gSettings.chkTranslationEnabled = env->addCheckBox(gGameConfig->translation_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_ENABLED, L"Ativar tradução automática");
+			menuHandler.MakeElementSynchronized(gSettings.chkTranslationEnabled);
+			IncrementXorY();
+			gSettings.chkTranslationYGOPRODeck = env->addCheckBox(gGameConfig->translation_ygoprodeck_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_YGOPRODECK, L"Usar YGOPRODeck API (oficial)");
+			menuHandler.MakeElementSynchronized(gSettings.chkTranslationYGOPRODeck);
+			IncrementXorY();
+			gSettings.chkTranslationLibreTranslate = env->addCheckBox(gGameConfig->translation_libretranslate_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_LIBRETRANSLATE, L"Usar LibreTranslate (fallback)");
+			menuHandler.MakeElementSynchronized(gSettings.chkTranslationLibreTranslate);
+			IncrementXorY();
+			gSettings.chkTranslationOnDemand = env->addCheckBox(gGameConfig->translation_on_demand, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_ON_DEMAND, L"Traduzir sob demanda (ao visualizar carta)");
+			menuHandler.MakeElementSynchronized(gSettings.chkTranslationOnDemand);
+			IncrementXorY();
+		}
+		
 		gSettings.btnReloadSkin = env->addButton(GetNextRect(), sPanel, BUTTON_RELOAD_SKIN, gDataManager->GetSysString(2066).data());
 		defaultStrings.emplace_back(gSettings.btnReloadSkin, 2066);
 		{
@@ -2042,6 +2062,17 @@ bool Game::MainLoop() {
 	}
 	while(!restart && device->run()) {
 		DispatchQueue();
+		if(gTranslationManager) {
+			const auto locale = Utils::ToUTF8IfNeeded(gGameConfig->locale);
+			const auto completed = gTranslationManager->TakeCompletedTranslations(locale);
+			if(showingcard != 0) {
+				const auto* displayed_card = gDataManager->GetCardData(showingcard);
+				const auto displayed_code = displayed_card && displayed_card->IsInArtworkOffsetRange()
+					? displayed_card->alias : showingcard;
+				if(std::find(completed.begin(), completed.end(), displayed_code) != completed.end())
+					ShowCardInfo(showingcard);
+			}
+		}
 		if(suspend) {
 			epro::this_thread::sleep_for(std::chrono::milliseconds(1));
 			continue;
@@ -2891,13 +2922,35 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type, bool forcePers
 		ClearCardInfo(0);
 		return;
 	}
+	std::optional<CardTranslation> cardTranslation;
+	std::string translationLocale;
+	if(gTranslationManager) {
+		translationLocale = Utils::ToUTF8IfNeeded(gGameConfig->locale);
+	}
 	auto cd = gDataManager->GetCardData(code);
 	if(!cd)
 		ClearCardInfo(0);
 	bool only_texture = !cd;
+	uint32_t translationCode = code;
+	if(cd && cd->IsInArtworkOffsetRange())
+		translationCode = cd->alias;
+	if(gTranslationManager && cd && !translationLocale.empty() && translationLocale != "en" && translationLocale != "English") {
+		cardTranslation = gTranslationManager->GetTranslation(translationCode, translationLocale);
+		if(!cardTranslation && gTranslationManager->IsTranslateOnDemand())
+			gTranslationManager->OnCardViewed(translationCode, translationLocale);
+	}
 	if(showingcard == code && !forcePersistent) {
-		if(!resize && !cardimagetextureloading)
+		if(!resize && !cardimagetextureloading) {
+			if(cardTranslation) {
+				if(!cardTranslation->name.empty())
+					stName->setText(BufferIO::DecodeUTF8(cardTranslation->name).data());
+				if(!cardTranslation->desc.empty()) {
+					stText->setText(BufferIO::DecodeUTF8(cardTranslation->desc).data());
+					RefreshCardInfoTextPositions();
+				}
+			}
 			return;
+		}
 		only_texture = only_texture || !resize;
 	}
 	int shouldrefresh = -1;
@@ -2911,12 +2964,16 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type, bool forcePers
 		persistentCardCode = code;
 		hasPersistentCard = true;
 	}
+	
 	if(only_texture)
 		return;
 	auto tmp_code = code;
 	if(cd->IsInArtworkOffsetRange())
 		tmp_code = cd->alias;
-	stName->setText(gDataManager->GetName(tmp_code).data());
+	if(cardTranslation && !cardTranslation->name.empty())
+		stName->setText(BufferIO::DecodeUTF8(cardTranslation->name).data());
+	else
+		stName->setText(gDataManager->GetName(tmp_code).data());
 	stPasscodeScope->setText(epro::format(L"[{:08}] {}", tmp_code, gDataManager->FormatScope(cd->ot)).data());
 	stSetName->setText(L"");
 	auto setcodes = cd->setcodes;
@@ -2965,7 +3022,10 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type, bool forcePers
 			stDataInfo->setText(L"");
 	}
 	RefreshCardInfoTextPositions();
-	stText->setText(gDataManager->GetText(code).data());
+	if(cardTranslation && !cardTranslation->desc.empty())
+		stText->setText(BufferIO::DecodeUTF8(cardTranslation->desc).data());
+	else
+		stText->setText(gDataManager->GetText(code).data());
 }
 void Game::RefreshCardInfoTextPositions() {
 	const int xLeft = Scale(15);
@@ -4119,6 +4179,13 @@ void Game::ApplyLocale(size_t index, bool forced) {
 	if(index > 0) {
 		try {
 			gGameConfig->locale = locales[index - 1].first;
+			
+			// Update TranslationManager locale
+			if (gTranslationManager) {
+				std::string locale_str = Utils::ToUTF8IfNeeded(gGameConfig->locale);
+				gTranslationManager->SetLocale(locale_str);
+			}
+			
 			auto locale = epro::format(EPRO_TEXT("./config/languages/{}"), gGameConfig->locale);
 			for(auto& file : Utils::FindFiles(locale, { EPRO_TEXT("cdb") })) {
 				gDataManager->LoadLocaleDB(epro::format(EPRO_TEXT("{}/{}"), locale, file));

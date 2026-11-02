@@ -10,6 +10,7 @@
 #include "utils.h"
 #include "windbot.h"
 #include "windbot_panel.h"
+#include "translation_manager.h"
 #if IRRLICHT_VERSION_MAJOR==1 && IRRLICHT_VERSION_MINOR==9
 #include "IrrlichtCommonIncludes1.9/CFileSystem.h"
 #else
@@ -163,10 +164,24 @@ DataHandler::DataHandler() {
 	imageDownloader = std::make_unique<ImageDownloader>();
 	LoadDatabases();
 	LoadPicUrls();
+	
+	// Initialize TranslationManager
+	gTranslationManager = std::make_unique<TranslationManager>();
+	TranslationManager::Config trans_config;
+	trans_config.locale = Utils::ToUTF8IfNeeded(configs->locale);
+	trans_config.enabled = configs->translation_enabled;
+	trans_config.ygoprodeck_enabled = configs->translation_ygoprodeck_enabled;
+	trans_config.libretranslate_enabled = configs->translation_libretranslate_enabled;
+	trans_config.libretranslate_url = configs->translation_libretranslate_url;
+	trans_config.translate_on_demand = configs->translation_on_demand;
+	trans_config.cache_max_age_days = configs->translation_cache_max_age_days;
+	gTranslationManager->Initialize(trans_config);
+	
 	deckManager->LoadLFList();
 	dataManager->LoadIdsMapping(EPRO_TEXT("./config/mappings.json"));
 }
 DataHandler::~DataHandler() {
+	gTranslationManager.reset();
 	if(filesystem)
 		filesystem->drop();
 	if(Utils::OSOperator)

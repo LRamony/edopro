@@ -2139,6 +2139,24 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 				gGameConfig->autoSaveReplay = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
 				break;
 			}
+			case CHECKBOX_TRANSLATION_ENABLED: {
+				gGameConfig->translation_enabled = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
+				if (gTranslationManager) gTranslationManager->SetEnabled(gGameConfig->translation_enabled);
+				break;
+			}
+			case CHECKBOX_TRANSLATION_YGOPRODECK: {
+				gGameConfig->translation_ygoprodeck_enabled = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
+				break;
+			}
+			case CHECKBOX_TRANSLATION_LIBRETRANSLATE: {
+				gGameConfig->translation_libretranslate_enabled = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
+				break;
+			}
+			case CHECKBOX_TRANSLATION_ON_DEMAND: {
+				gGameConfig->translation_on_demand = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
+				if (gTranslationManager) gTranslationManager->SetTranslateOnDemand(gGameConfig->translation_on_demand);
+				break;
+			}
 			case CHECKBOX_TOPDOWN: {
 				mainGame->current_topdown = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
 				break;
@@ -3179,4 +3197,3 @@ void ClientField::SendRPSResult(uint8_t i) {
 	}
 }
 }
-
