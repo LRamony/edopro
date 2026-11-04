@@ -10,7 +10,7 @@ namespace ygo {
 struct CardTranslation {
     uint32_t card_id = 0;
     std::string locale;
-    std::string source;  // "ygoprodeck", "libretranslate", "manual"
+    std::string source;  // "ygoprodeck", "apertium", "manual"
     
     std::string name;
     std::string desc;
@@ -33,24 +33,23 @@ struct CardTranslation {
 struct LanguageInfo {
     std::string locale_code;      // EDOPro locale (e.g., "pt-BR")
     std::string ygoprodeck_code;  // YGOPRODeck API code (e.g., "pt") - empty if not supported
-    std::string libretranslate_code;  // LibreTranslate code (e.g., "pt")
+    std::string apertium_code;  // Apertium language code (e.g., "por_BR")
     std::string display_name;     // UI display name
 };
 
 // Returns all 10 supported languages
 inline const std::array<LanguageInfo, 10>& GetSupportedLanguages() {
     static const std::array<LanguageInfo, 10> languages = {{
-        {"en", "en", "en", "English"},
-        {"pt-BR", "pt", "pt", "Português Brasil"},
-        {"fr", "fr", "fr", "Français"},
-        {"de", "de", "de", "Deutsch"},
-        {"it", "it", "it", "Italiano"},
-        {"zh-CN", "", "zh", "中文 (简体)"},
-        {"es", "", "es", "Español"},
-        {"ar", "", "ar", "العربية"},
-        {"bn", "", "bn", "বাংলা"},
-        {"ru", "", "ru", "Русский"},
-        // Note: Urdu "ur" not in LibreTranslate yet, will fallback
+        {"en", "en", "eng", "English"},
+        {"pt-BR", "pt", "por_BR", "Português Brasil"},
+        {"fr", "fr", "fra", "Français"},
+        {"de", "de", "deu", "Deutsch"},
+        {"it", "it", "ita", "Italiano"},
+        {"zh-CN", "", "zho", "中文 (简体)"},
+        {"es", "", "spa", "Español"},
+        {"ar", "", "ara", "العربية"},
+        {"bn", "", "ben", "বাংলা"},
+        {"ru", "", "rus", "Русский"},
     }};
     return languages;
 }
@@ -70,10 +69,10 @@ inline bool IsYGOPRODeckSupported(const std::string& locale) {
     return lang && !lang->ygoprodeck_code.empty();
 }
 
-// Check if locale is supported by LibreTranslate
-inline bool IsLibreTranslateSupported(const std::string& locale) {
+// Check if locale has an Apertium language code
+inline bool IsApertiumSupported(const std::string& locale) {
     auto* lang = FindLanguage(locale);
-    return lang && !lang->libretranslate_code.empty();
+    return lang && !lang->apertium_code.empty();
 }
 
 // Get YGOPRODeck language code for locale
@@ -82,10 +81,10 @@ inline std::string GetYGOPRODeckCode(const std::string& locale) {
     return lang ? lang->ygoprodeck_code : "";
 }
 
-// Get LibreTranslate language code for locale
-inline std::string GetLibreTranslateCode(const std::string& locale) {
+// Get Apertium language code for locale
+inline std::string GetApertiumCode(const std::string& locale) {
     auto* lang = FindLanguage(locale);
-    return lang ? lang->libretranslate_code : "";
+    return lang ? lang->apertium_code : "";
 }
 
 } // namespace ygo

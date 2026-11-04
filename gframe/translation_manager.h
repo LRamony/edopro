@@ -4,7 +4,7 @@
 #include "card_translation.h"
 #include "translation_cache.h"
 #include "ygoprodeck_client.h"
-#include "libretranslate_client.h"
+#include "apertium_client.h"
 #include "data_manager.h"
 #include <string>
 #include <memory>
@@ -29,11 +29,9 @@ public:
         bool ygoprodeck_enabled = true;
         int ygoprodeck_rate_limit = 20;
         
-        // LibreTranslate settings
-        bool libretranslate_enabled = true;
-        std::string libretranslate_url = "https://libretranslate.de/translate";
-        std::string libretranslate_api_key = "";
-        int libretranslate_rate_limit = 60;
+        // Apertium settings
+        bool apertium_enabled = true;
+        int apertium_rate_limit_per_min = 60;
         
         // Cache settings
         int cache_max_age_days = 30;
@@ -49,7 +47,7 @@ public:
         size_t cache_hits = 0;
         size_t cache_misses = 0;
         size_t ygoprodeck_calls = 0;
-        size_t libretranslate_calls = 0;
+        size_t apertium_calls = 0;
         size_t locale_db_writes = 0;
         size_t translations_done = 0;
         size_t errors = 0;
@@ -106,7 +104,7 @@ private:
     std::atomic<std::size_t> cache_hits_{0};
     std::atomic<std::size_t> cache_misses_{0};
     std::atomic<std::size_t> ygoprodeck_calls_{0};
-    std::atomic<std::size_t> libretranslate_calls_{0};
+    std::atomic<std::size_t> apertium_calls_{0};
     std::atomic<std::size_t> locale_db_writes_{0};
     std::atomic<std::size_t> translations_done_{0};
     std::atomic<std::size_t> errors_{0};
@@ -114,7 +112,7 @@ private:
     // Components
     std::unique_ptr<TranslationCache> cache_;
     std::unique_ptr<YGOPRODeckClient> ygoprodeck_;
-    std::unique_ptr<LibreTranslateClient> libretranslate_;
+    std::unique_ptr<ApertiumClient> apertium_;
     
     // Current locale
     std::string current_locale_;
@@ -131,7 +129,7 @@ private:
     std::optional<CardTranslation> TryGetFromCache(uint32_t card_code, const std::string& locale);
     std::optional<CardTranslation> TryGetFromLocaleDB(uint32_t card_code, const std::string& locale);
     std::optional<CardTranslation> TryFetchFromYGOPRODeck(uint32_t card_code, const std::string& locale);
-    std::optional<CardTranslation> TryTranslateWithLibreTranslate(uint32_t card_code, const std::string& locale);
+    std::optional<CardTranslation> TryTranslateWithApertium(uint32_t card_code, const std::string& locale);
     bool SaveToLocaleDB(const CardTranslation& translation);
     bool EnsureLocaleDBExists(const std::string& locale);
     

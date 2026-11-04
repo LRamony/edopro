@@ -2148,8 +2148,8 @@ bool ClientField::OnCommonEvent(const irr::SEvent& event, bool& stopPropagation)
 				gGameConfig->translation_ygoprodeck_enabled = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
 				break;
 			}
-			case CHECKBOX_TRANSLATION_LIBRETRANSLATE: {
-				gGameConfig->translation_libretranslate_enabled = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
+			case CHECKBOX_TRANSLATION_APERTIUM: {
+				gGameConfig->translation_apertium_enabled = static_cast<irr::gui::IGUICheckBox*>(event.GUIEvent.Caller)->isChecked();
 				break;
 			}
 			case CHECKBOX_TRANSLATION_ON_DEMAND: {

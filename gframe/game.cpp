@@ -12,6 +12,7 @@
 #include "image_manager.h"
 #include "data_manager.h"
 #include "deck_manager.h"
+#include "bufferio.h"
 #include "dllinterface.h"
 #include "replay.h"
 #include "materials.h"
@@ -1691,8 +1692,8 @@ void Game::PopulateSettingsWindow() {
 			gSettings.chkTranslationYGOPRODeck = env->addCheckBox(gGameConfig->translation_ygoprodeck_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_YGOPRODECK, L"Usar YGOPRODeck API (oficial)");
 			menuHandler.MakeElementSynchronized(gSettings.chkTranslationYGOPRODeck);
 			IncrementXorY();
-			gSettings.chkTranslationLibreTranslate = env->addCheckBox(gGameConfig->translation_libretranslate_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_LIBRETRANSLATE, L"Usar LibreTranslate (fallback)");
-			menuHandler.MakeElementSynchronized(gSettings.chkTranslationLibreTranslate);
+			gSettings.chkTranslationApertium = env->addCheckBox(gGameConfig->translation_apertium_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_APERTIUM, L"Usar Apertium (fallback)");
+			menuHandler.MakeElementSynchronized(gSettings.chkTranslationApertium);
 			IncrementXorY();
 			gSettings.chkTranslationOnDemand = env->addCheckBox(gGameConfig->translation_on_demand, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_ON_DEMAND, L"Traduzir sob demanda (ao visualizar carta)");
 			menuHandler.MakeElementSynchronized(gSettings.chkTranslationOnDemand);
@@ -2936,7 +2937,7 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type, bool forcePers
 		translationCode = cd->alias;
 	if(gTranslationManager && cd && !translationLocale.empty() && translationLocale != "en" && translationLocale != "English") {
 		cardTranslation = gTranslationManager->GetTranslation(translationCode, translationLocale);
-		if(!cardTranslation && gTranslationManager->IsTranslateOnDemand())
+		if((!cardTranslation || cardTranslation->desc.empty()) && gTranslationManager->IsTranslateOnDemand())
 			gTranslationManager->OnCardViewed(translationCode, translationLocale);
 	}
 	if(showingcard == code && !forcePersistent) {

@@ -4,7 +4,7 @@
 
 Implementar sistema de tradução automática de cartas do Yu-Gi-Oh no EDOPro que:
 1. **Busca traduções oficiais** da API YGOPRODeck (5 idiomas suportados nativamente)
-2. **Traduz via LibreTranslate** para idiomas não cobertos (5 idiomas restantes)
+2. **Traduz via Apertium** para idiomas cobertos por pares de tradução disponíveis
 3. **Armazena em banco locale** (`config/languages/{locale}/cards.cdb`) para performance
 4. **Funciona on-demand** - traduz apenas quando a carta é visualizada
 5. **Cache local** - evita re-traduções e chamadas de API desnecessárias
@@ -16,18 +16,17 @@ Implementar sistema de tradução automática de cartas do Yu-Gi-Oh no EDOPro qu
 | Código | Idioma | Fonte Primária | Fallback |
 |--------|--------|----------------|----------|
 | `en` | Inglês | YGOPRODeck (nativo) | - |
-| `pt-BR` | Português Brasil | YGOPRODeck (`pt`) | LibreTranslate |
-| `fr` | Francês | YGOPRODeck (`fr`) | LibreTranslate |
-| `de` | Alemão | YGOPRODeck (`de`) | LibreTranslate |
-| `it` | Italiano | YGOPRODeck (`it`) | LibreTranslate |
-| `zh-CN` | Chinês Mandarim | - | LibreTranslate |
-| `es` | Espanhol | - | LibreTranslate |
-| `ar` | Árabe | - | LibreTranslate |
-| `bn` | Bengali | - | LibreTranslate |
-| `ru` | Russo | - | LibreTranslate |
-| `ur` | Urdu | - | LibreTranslate |
+| `pt-BR` | Português Brasil | YGOPRODeck (`pt`) | Apertium `por_BR` (via espanhol) |
+| `fr` | Francês | YGOPRODeck (`fr`) | Apertium (via espanhol/catalão) |
+| `de` | Alemão | YGOPRODeck (`de`) | Sem par Apertium a partir do inglês |
+| `it` | Italiano | YGOPRODeck (`it`) | Apertium (via espanhol/catalão) |
+| `zh-CN` | Chinês Mandarim | - | Sem par Apertium a partir do inglês |
+| `es` | Espanhol | - | Apertium (direto) |
+| `ar` | Árabe | - | Sem par Apertium a partir do inglês |
+| `bn` | Bengali | - | Sem par Apertium a partir do inglês |
+| `ru` | Russo | - | Sem par Apertium a partir do inglês |
 
-**Nota**: YGOPRODeck usa `pt` para português (pt-BR/pt-PT). Usaremos `pt-BR` como locale no EDOPro.
+**Nota**: Para o fallback do português brasileiro, o destino do Apertium é `por_BR`; `por` é português europeu e não deve ser usado para o locale `pt-BR`.
 
 ---
 
@@ -40,7 +39,7 @@ Game::ShowCardInfo()
 TranslationManager (Novo)
   ├── Cache Local (SQLite)
   ├── YGOPRODeck API (5 idiomas)
-  └── LibreTranslate (5 idiomas)
+  └── Apertium (pares públicos disponíveis)
          │
          ▼
 Locale Database (cards.cdb)
@@ -70,7 +69,7 @@ CREATE TABLE translations (
 CREATE TABLE api_usage (
     date TEXT PRIMARY KEY,
     ygoprodeck_calls INTEGER DEFAULT 0,
-    libretranslate_chars INTEGER DEFAULT 0
+    libretranslate_chars INTEGER DEFAULT 0 -- coluna legada mantida por compatibilidade
 );
 ```
 
@@ -82,13 +81,13 @@ CREATE TABLE api_usage (
 - Cache de resposta (2 dias conforme API)
 - Suporta parâmetro `&language={code}`
 
-### 3. LibreTranslateClient
-**Arquivo**: `gframe/libretranslate_client.h/cpp`
+### 3. ApertiumClient
+**Arquivo**: `gframe/apertium_client.h/cpp`
 
-- HTTP client para LibreTranslate
-- Suporta auto-hospedado ou instância pública
-- Batch translation para múltiplos textos
-- Rate limiting configurável
+- HTTP client para a API pública gratuita do Apertium
+- Descobre os pares disponíveis em `/apy/listPairs`
+- Busca rotas de até dois pares entre inglês e o idioma de destino
+- Não requer chave de API
 
 ### 4. TranslationManager (Orquestrador)
 **Arquivo**: `gframe/translation_manager.h/cpp`
@@ -102,7 +101,7 @@ public:
     // 1. Verifica cache local (SQLite)
     // 2. Se não tem, verifica locale DB (cards.cdb)
     // 3. Se não tem, busca YGOPRODeck (se idioma suportado)
-    // 4. Se não tem, traduz via LibreTranslate
+    // 4. Se não tem, traduz via Apertium quando houver uma rota disponível
     // 5. Salva no locale DB e cache
     
     struct Stats { int cached; int api_calls; int translations_done; };
@@ -111,7 +110,7 @@ public:
 private:
     TranslationCache cache;
     YGOPRODeckClient ygoprodeck;
-    LibreTranslateClient libretranslate;
+    ApertiumClient apertium;
     std::string current_locale;
 };
 ```
@@ -188,8 +187,8 @@ Busca YGOPRODeck (se pt, fr, de, it, en)
   Tem     Não tem
    │         │
    ▼         ▼
-Salva    LibreTranslate
-no DB    (traduz EN→PT)
+Salva    Apertium
+no DB    (traduz EN→idioma de destino, se houver rota)
    │         │
    └────┬────┘
         ▼
@@ -224,7 +223,9 @@ bool TranslationManager::SaveToLocaleDB(uint32_t code, const CardTranslation& t)
 
 ---
 
-## Configuração (system.conf / user_configs)
+## Configuração
+
+A API pública do Apertium não exige chave nem configuração de URL. Na interface, o usuário pode ativar ou desativar o fallback; a disponibilidade de idiomas depende dos pares ativos no serviço.
 
 ```json
 {
@@ -234,10 +235,8 @@ bool TranslationManager::SaveToLocaleDB(uint32_t code, const CardTranslation& t)
       "enabled": true,
       "rate_limit_per_sec": 20
     },
-    "libretranslate": {
+    "apertium": {
       "enabled": true,
-      "url": "https://libretranslate.de/translate",
-      "api_key": "",
       "rate_limit_per_min": 60
     },
     "cache": {
@@ -273,7 +272,7 @@ tabSettings.chkAutoTranslate = env->addCheckBox(gGameConfig->auto_translate, Get
 gframe/
 ├── translation_cache.h/cpp
 ├── ygoprodeck_client.h/cpp
-├── libretranslate_client.h/cpp
+├── apertium_client.h/cpp
 ├── translation_manager.h/cpp
 ├── card_translation.h
 ```
@@ -297,7 +296,7 @@ gframe/
 files {
     "gframe/translation_cache.cpp",
     "gframe/ygoprodeck_client.cpp",
-    "gframe/libretranslate_client.cpp",
+    "gframe/apertium_client.cpp",
     "gframe/translation_manager.cpp",
 }
 ```
@@ -313,9 +312,9 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 - Cache local de 2 dias
 - User-Agent: `EDOPro/41.0.0 (Translation System)`
 
-### LibreTranslate
-- Público: ~100 req/hora por IP
-- Auto-hospedado: sem limite
+### Apertium
+- API pública sem chave de autenticação
+- Pares e rotas verificados dinamicamente pela API
 - Token bucket local
 
 ---
@@ -326,12 +325,12 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 1. Primeira visualização - Carta nunca traduzida → API → DB → UI
 2. Segunda visualização - Carta no cache → Cache → UI (instantâneo)
 3. Troca de idioma - Limpa locale strings, recarrega do novo locale DB
-4. Carta sem tradução oficial - YGOPRODeck falha → LibreTranslate → DB
+4. Carta sem tradução oficial - YGOPRODeck falha → Apertium (se houver rota) → DB
 5. Offline - Usa apenas cache/DB local
 6. Rate limit - Queue com backoff exponencial
 
 ### Métricas de Sucesso
-- Latência 1ª vez: < 2s (API) / < 500ms (LibreTranslate)
+- Latência 1ª vez: depende do número de pares da rota Apertium
 - Latência cache: < 10ms
 - Taxa de acerto cache: > 90% após 1 hora de uso
 - Zero crashes por falha de tradução
@@ -343,9 +342,9 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 | Risco | Probabilidade | Impacto | Mitigação |
 |-------|---------------|---------|-----------|
 | YGOPRODeck muda API | Média | Alto | Versionamento no client, fallback gracioso |
-| LibreTranslate público indisponível | Baixa | Médio | Suporte a instância local (Docker) |
+| Apertium público indisponível | Baixa | Médio | Preservar fallback para dados locais |
 | Rate limit atingido | Média | Baixo | Queue local + backoff + cache agressivo |
-| Tradução ruim (LibreTranslate) | Média | Baixo | Permitir edição manual + reportar |
+| Tradução ruim (Apertium) | Média | Baixo | Preservar texto original se a tradução falhar |
 | DB locale corrompido | Baixa | Alto | Transações SQLite + backup automático |
 | Memória alta (cache) | Baixa | Médio | LRU eviction + limite configurável |
 
@@ -357,7 +356,7 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 |------|--------|-------|
 | 1 | TranslationCache (SQLite) | 2 dias |
 | 2 | YGOPRODeckClient (HTTP + parsing) | 2 dias |
-| 3 | LibreTranslateClient | 1 dia |
+| 3 | ApertiumClient | 1 dia |
 | 4 | TranslationManager (orquestração) | 2 dias |
 | 5 | Integração Game::ShowCardInfo | 1 dia |
 | 6 | UI Configurações (Cliente → Idioma) | 1 dia |
@@ -390,7 +389,7 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 ## Próximos Passos
 
 1. **Aprovar este plano** ✓
-2. **Configurar instância LibreTranslate** (Docker: `docker run -d -p 5000:5000 libretranslate/libretranslate`)
+2. **Usar a API pública do Apertium** (sem chave; disponibilidade depende dos pares ativos)
 3. **Implementar Fase 1-2** (Cache + YGOPRODeck)
 4. **Testar com 1 idioma** (pt-BR)
 5. **Expandir para 10 idiomas**
@@ -406,7 +405,7 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 
 3. **Compatibilidade**: O sistema de locale do EDOPro já suporta múltiplos `cards.cdb` por idioma. Nossa implementação apenas **popula** esses bancos.
 
-4. **Gratuito**: Ambos os serviços são gratuitos. LibreTranslate auto-hospedado = custo zero infinito.
+4. **Gratuito**: A API pública do Apertium não exige chave; alguns idiomas não possuem rota a partir do inglês.
 
 ---
 
