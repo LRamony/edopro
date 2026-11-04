@@ -19,6 +19,7 @@ public:
 
     YugipediaClient();
     void Initialize(const Config& config = Config());
+    std::optional<std::string> FetchCardImageUrl(const std::string& card_name);
     std::optional<CardTranslation> FetchTranslation(uint32_t card_id,
                                                     const std::string& locale,
                                                     const std::string& card_name);

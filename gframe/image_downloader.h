@@ -11,6 +11,8 @@
 #include "text_types.h"
 
 namespace ygo {
+class YugipediaClient;
+
 #ifndef IMGTYPE
 #define IMGTYPE
 enum imgType {
@@ -57,6 +59,7 @@ private:
 	epro::condition_variable cv;
 	bool stop_threads;
 	std::vector<PicSource> pic_urls;
+	std::unique_ptr<YugipediaClient> yugipedia_client;
 	std::vector<epro::thread> download_threads;
 };
 

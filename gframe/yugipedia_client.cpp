@@ -182,6 +182,65 @@ std::string YugipediaClient::PerformRequest(const std::string& url) {
     return response;
 }
 
+std::optional<std::string> YugipediaClient::FetchCardImageUrl(const std::string& card_name) {
+    const auto title = Trim(card_name);
+    if (title.empty())
+        return std::nullopt;
+
+    const auto fetch_json = [this](const std::string& query) {
+        const auto response = PerformRequest(config_.base_url + "?" + query);
+        if (response.empty())
+            return nlohmann::json{};
+
+        const auto json = nlohmann::json::parse(response, nullptr, false);
+        return json.is_discarded() ? nlohmann::json{} : json;
+    };
+    const auto get_page_image = [](const nlohmann::json& json) -> std::optional<std::string> {
+        if (!json.contains("query") || !json["query"].contains("pages") ||
+            !json["query"]["pages"].is_object())
+            return std::nullopt;
+
+        for (const auto& page : json["query"]["pages"]) {
+            if (page.contains("pageimage") && page["pageimage"].is_string()) {
+                const auto image = page["pageimage"].get<std::string>();
+                if (!image.empty())
+                    return image;
+            }
+        }
+        return std::nullopt;
+    };
+
+    auto page = fetch_json(
+        "action=query&titles=" + UrlEncode(title) +
+        "&prop=pageimages&piprop=name&redirects=1&format=json");
+    auto image = get_page_image(page);
+    if (!image) {
+        const auto search = UrlEncode(title);
+        page = fetch_json(
+            "action=query&generator=search&gsrsearch=" + search +
+            "&gsrnamespace=0&gsrlimit=1&prop=pageimages&piprop=name&format=json");
+        image = get_page_image(page);
+    }
+    if (!image)
+        return std::nullopt;
+
+    const auto file = fetch_json(
+        "action=query&titles=File:" + UrlEncode(*image) +
+        "&prop=imageinfo&iiprop=url&format=json");
+    if (!file.contains("query") || !file["query"].contains("pages") ||
+        !file["query"]["pages"].is_object())
+        return std::nullopt;
+    for (const auto& image_page : file["query"]["pages"]) {
+        if (!image_page.contains("imageinfo") || !image_page["imageinfo"].is_array() ||
+            image_page["imageinfo"].empty())
+            continue;
+        const auto& image_info = image_page["imageinfo"][0];
+        if (image_info.contains("url") && image_info["url"].is_string())
+            return image_info["url"].get<std::string>();
+    }
+    return std::nullopt;
+}
+
 std::optional<CardTranslation> YugipediaClient::FetchTranslation(uint32_t card_id,
                                                                  const std::string& locale,
                                                                  const std::string& card_name) {

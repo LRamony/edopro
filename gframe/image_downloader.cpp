@@ -7,6 +7,8 @@
 #include "file_stream.h"
 #include "fmt.h"
 #include "curl.h"
+#include "data_manager.h"
+#include "yugipedia_client.h"
 
 namespace ygo {
 
@@ -16,9 +18,9 @@ struct curl_payload {
 	std::array<uint8_t, 8> header;
 };
 
-ImageDownloader::ImageDownloader() : stop_threads(false) {
+ImageDownloader::ImageDownloader() : stop_threads(false), yugipedia_client(std::make_unique<YugipediaClient>()) {
 	download_threads.reserve(gGameConfig->imageDownloadThreads);
-	for(int i = 0; i < gGameConfig->imageLoadThreads; ++i)
+	for(int i = 0; i < gGameConfig->imageDownloadThreads; ++i)
 		download_threads.emplace_back(&ImageDownloader::DownloadPic, this);
 }
 ImageDownloader::~ImageDownloader() {
@@ -90,6 +92,7 @@ void ImageDownloader::DownloadPic() {
 	curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_USERAGENT, "EDOPro/41.0.2");
 	if(gGameConfig->ssl_certificate_path.size() && Utils::FileExists(Utils::ToPathString(gGameConfig->ssl_certificate_path)))
 		curl_easy_setopt(curl, CURLOPT_CAINFO, gGameConfig->ssl_certificate_path.data());
 	auto SetPayloadAndUrl = [&payload, &curl](epro::stringview url, FILE* stream) {
@@ -156,16 +159,67 @@ void ImageDownloader::DownloadPic() {
 			fclose(fp);
 			if(res == CURLE_OK) {
 				const auto ext = GetExtension(payload.header);
-				dest_folder.append(ext.data(), ext.size());
-				if(!Utils::FileMove(name, dest_folder))
-					Utils::FileDelete(name);
-				break;
+				auto image_path = dest_folder;
+				image_path.append(ext.data(), ext.size());
+				if(Utils::FileMove(name, image_path)) {
+					dest_folder = std::move(image_path);
+					break;
+				}
+				res = CURLE_WRITE_ERROR;
+				Utils::FileDelete(name);
+				continue;
 			}
 			if(gGameConfig->logDownloadErrors) {
 				ygo::ErrorLog("Failed downloading pic for {}", code);
 				ygo::ErrorLog("Curl error: ({}) {} ({})", res, curl_easy_strerror(res), curl_error_buffer);
 			}
 			Utils::FileDelete(name);
+		}
+		if(res != CURLE_OK && type == imgType::ART && gDataManager) {
+			const auto card = gDataManager->cards.find(code);
+			if(card != gDataManager->cards.end()) {
+				const auto base_name = Utils::ToUTF8IfNeeded(card->second._strings.name);
+				const auto localized_name = Utils::ToUTF8IfNeeded(gDataManager->GetName(code));
+				const auto download_from_yugipedia = [&](const std::string& card_name) {
+					const auto url = yugipedia_client->FetchCardImageUrl(card_name);
+					if(!url) {
+						if(gGameConfig->logDownloadErrors)
+							ygo::ErrorLog("No Yugipedia image found for card {} ({})", code, card_name);
+						return false;
+					}
+					auto fp = fileopen(name.data(), "wb");
+					if(fp == nullptr) {
+						res = CURLE_WRITE_ERROR;
+						if(gGameConfig->logDownloadErrors) {
+							ygo::ErrorLog("Failed opening {} for write.", Utils::ToUTF8IfNeeded(name));
+							ygo::ErrorLog("Error: {}.", strerror(errno));
+						}
+						return false;
+					}
+					SetPayloadAndUrl(*url, fp);
+					res = curl_easy_perform(curl);
+					fclose(fp);
+					if(res == CURLE_OK) {
+						auto image_path = dest_folder;
+						const auto ext = GetExtension(payload.header);
+						image_path.append(ext.data(), ext.size());
+						if(Utils::FileMove(name, image_path)) {
+							dest_folder = std::move(image_path);
+							return true;
+						}
+						res = CURLE_WRITE_ERROR;
+					}
+					if(gGameConfig->logDownloadErrors) {
+						ygo::ErrorLog("Failed downloading Yugipedia pic for {}", code);
+						ygo::ErrorLog("Curl error: ({}) {} ({})", res, curl_easy_strerror(res), curl_error_buffer);
+					}
+					Utils::FileDelete(name);
+					return false;
+				};
+				if((base_name.empty() || !download_from_yugipedia(base_name)) &&
+				   !localized_name.empty() && localized_name != base_name)
+					download_from_yugipedia(localized_name);
+			}
 		}
 		lck.lock();
 		if(res == CURLE_OK) {
