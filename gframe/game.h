@@ -277,6 +277,7 @@ struct host_panel_elements {
 	irr::gui::IGUIButton* btnHostPrepNotReady;
 	irr::gui::IGUIButton* btnHostPrepStart;
 	irr::gui::IGUIButton* btnHostPrepCancel;
+	irr::gui::IGUIStaticText* stQuickMatchLobbyTimer;
 };
 
 struct replay_panel_elements {

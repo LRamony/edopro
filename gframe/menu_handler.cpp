@@ -98,14 +98,18 @@ void ServerLobby::QuickMatchLobbyTick() {
 	using clock = std::chrono::steady_clock;
 	static clock::time_point lobby_start;
 	static bool timer_running = false;
-	if(quickMatchRole == QM_NONE)
+	if(quickMatchRole == QM_NONE) {
+		mainGame->stQuickMatchLobbyTimer->setVisible(false);
 		return;
+	}
 	if(!quickMatchSession) {
 		quickMatchRole = QM_NONE;
+		mainGame->stQuickMatchLobbyTimer->setVisible(false);
 		return;
 	}
 	if(!mainGame->dInfo.isInLobby) {
 		timer_running = false;
+		mainGame->stQuickMatchLobbyTimer->setVisible(false);
 		return;
 	}
 	const auto now = clock::now();
@@ -118,13 +122,21 @@ void ServerLobby::QuickMatchLobbyTick() {
 		timer_running = false;
 		quickMatchRole = QM_NONE;
 		quickMatchTypeChanged = false;
+		mainGame->stQuickMatchLobbyTimer->setVisible(false);
 		LeaveHostPrepare();
 		quickMatchRestartPending = true;
 	};
-	// the host of the room we joined didn't start the duel in 1 minute
-	if(quickMatchRole == QM_GUEST && now - lobby_start > std::chrono::seconds(60)) {
-		leave_and_search();
-		return;
+	if(quickMatchRole == QM_GUEST) {
+		const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - lobby_start).count();
+		const auto remaining = 30 - elapsed;
+		if(remaining <= 0) {
+			leave_and_search();
+			return;
+		}
+		mainGame->stQuickMatchLobbyTimer->setText(epro::format(L"00:{:02}", remaining).data());
+		mainGame->stQuickMatchLobbyTimer->setVisible(true);
+	} else {
+		mainGame->stQuickMatchLobbyTimer->setVisible(false);
 	}
 	if(!quickMatchTypeChanged)
 		return;
@@ -146,6 +158,7 @@ void ServerLobby::QuickMatchLobbyTick() {
 		timer_running = false;
 		quickMatchRole = QM_NONE;
 		quickMatchSession = false;
+		mainGame->stQuickMatchLobbyTimer->setVisible(false);
 		LeaveHostPrepare();
 		mainGame->PopupMessage(L"No valid deck to play. Create or save a deck in the deck editor.");
 	}

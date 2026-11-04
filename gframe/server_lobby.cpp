@@ -207,22 +207,29 @@ void ServerLobby::UpdateQuickMatch() {
 			return;
 		qmWaiting = false;
 		if(last_fetch_ok) {
-			for(const auto& room : roomsVector) {
-				if(room.started || room.locked)
-					continue;
-				// full room: we would join as a spectator
-				if(room.players.size() >= static_cast<size_t>(room.info.team1 + room.info.team2))
-					continue;
-				std::wstring banlist;
-				for(const auto& list : gdeckManager->_lfList) {
-					if(list.hash == room.info.lflist) {
-						banlist = list.listName;
-						break;
+			const auto try_join_rooms = [&](bool bestOfThree) {
+				for(const auto& room : roomsVector) {
+					if(room.started || room.locked || room.info.team1 != 1 || room.info.team2 != 1)
+						continue;
+					if((room.info.best_of == 3) != bestOfThree)
+						continue;
+					// full room: we would join as a spectator
+					if(room.players.size() >= 2)
+						continue;
+					std::wstring banlist;
+					for(const auto& list : gdeckManager->_lfList) {
+						if(list.hash == room.info.lflist) {
+							banlist = list.listName;
+							break;
+						}
 					}
+					if(GetStyleFromBanlistName(banlist) == quickMatchStyle && JoinRoomDirect(room.id))
+						return true;
 				}
-				if(GetStyleFromBanlistName(banlist) == quickMatchStyle && JoinRoomDirect(room.id))
-					return;
-			}
+				return false;
+			};
+			if(try_join_rooms(true) || try_join_rooms(false))
+				return;
 		}
 		// not found on this server, go to the next one (all servers = global search)
 		if(serversVector.size() > 1) {
@@ -531,4 +538,3 @@ const epro::Host& ServerInfo::Resolved() const {
 }
 
 }
-

@@ -1424,6 +1424,9 @@ void Game::PopulateGameHostWindows() {
 	defaultStrings.emplace_back(btnHostPrepStart, 1215);
 	btnHostPrepCancel = env->addButton(Scale(350, 280, 460, 305), wHostPrepare, BUTTON_HP_CANCEL, gDataManager->GetSysString(1210).data());
 	defaultStrings.emplace_back(btnHostPrepCancel, 1210);
+	stQuickMatchLobbyTimer = env->addStaticText(L"", Scale(350, 255, 460, 275), false, false, wHostPrepare);
+	stQuickMatchLobbyTimer->setTextAlignment(irr::gui::EGUIA_CENTER, irr::gui::EGUIA_CENTER);
+	stQuickMatchLobbyTimer->setVisible(false);
 }
 
 void Game::PopulateAIBotWindow() {
