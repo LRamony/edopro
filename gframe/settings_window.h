@@ -65,9 +65,6 @@ struct SettingsWindow {
 	irr::gui::IGUIComboBox* cbCurrentLocale;
 	irr::gui::IGUIStaticText* stTranslation;
 	irr::gui::IGUICheckBox* chkTranslationEnabled;
-	irr::gui::IGUICheckBox* chkTranslationYGOPRODeck;
-	irr::gui::IGUICheckBox* chkTranslationApertium;
-	irr::gui::IGUICheckBox* chkTranslationOnDemand;
 	irr::gui::IGUIStaticText* stDpiScale;
 	irr::gui::IGUIEditBox* ebDpiScale;
 	irr::gui::IGUIButton* btnRestart;

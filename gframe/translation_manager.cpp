@@ -14,10 +14,13 @@ namespace ygo {
 
 namespace {
 
-bool IsStaleApertiumTranslation(const CardTranslation& translation, const std::string& locale) {
-    if (translation.source.compare(0, 8, "apertium") != 0)
-        return false;
-    return translation.source != "apertium:" + GetApertiumCode(locale);
+bool IsObsoleteApertiumTranslation(const CardTranslation& translation) {
+    return translation.source.compare(0, 8, "apertium") == 0;
+}
+
+bool IsYugipediaMissingTranslation(const CardTranslation& translation) {
+    return translation.source.rfind("yugipedia:title:", 0) == 0 &&
+        translation.source.find(":missing") != std::string::npos;
 }
 
 } // namespace
@@ -40,7 +43,6 @@ bool TranslationManager::Initialize(const Config& config) {
     }
     
     config_ = config;
-    translate_on_demand_ = config.translate_on_demand;
     current_locale_ = config.locale;
     
     // Initialize cache
@@ -52,22 +54,16 @@ bool TranslationManager::Initialize(const Config& config) {
     }
     
     // Initialize YGOPRODeck client
-    if (config_.ygoprodeck_enabled) {
-        ygoprodeck_ = std::make_unique<YGOPRODeckClient>();
-        YGOPRODeckClient::Config ygo_config;
-        ygo_config.rate_limit_per_sec = config_.ygoprodeck_rate_limit;
-        ygo_config.timeout_seconds = 10;
-        ygoprodeck_->Initialize(ygo_config);
-    }
-    
-    // Initialize Apertium client
-    if (config_.apertium_enabled) {
-        apertium_ = std::make_unique<ApertiumClient>();
-        ApertiumClient::Config apertium_config;
-        apertium_config.rate_limit_per_min = config_.apertium_rate_limit_per_min;
-        apertium_config.timeout_seconds = 30;
-        apertium_->Initialize(apertium_config);
-    }
+    ygoprodeck_ = std::make_unique<YGOPRODeckClient>();
+    YGOPRODeckClient::Config ygo_config;
+    ygo_config.rate_limit_per_sec = config_.ygoprodeck_rate_limit;
+    ygo_config.timeout_seconds = 10;
+    ygoprodeck_->Initialize(ygo_config);
+
+    yugipedia_ = std::make_unique<YugipediaClient>();
+    YugipediaClient::Config yugipedia_config;
+    yugipedia_config.rate_limit_per_min = config_.yugipedia_rate_limit_per_min;
+    yugipedia_->Initialize(yugipedia_config);
     
     // Ensure locale DB directory exists
     Utils::MakeDirectory(Utils::ToPathString(config_.locale_db_path));
@@ -104,14 +100,6 @@ void TranslationManager::SetEnabled(bool enabled) {
     config_.enabled = enabled;
 }
 
-bool TranslationManager::IsTranslateOnDemand() const {
-    return translate_on_demand_;
-}
-
-void TranslationManager::SetTranslateOnDemand(bool enabled) {
-    translate_on_demand_ = enabled;
-}
-
 bool TranslationManager::EnsureCardTranslated(uint32_t card_code, const std::string& locale) {
     if (!IsEnabled()) return false;
     
@@ -121,12 +109,14 @@ bool TranslationManager::EnsureCardTranslated(uint32_t card_code, const std::str
     if (target_locale == "en") return true;
     
     std::optional<CardTranslation> partial_translation;
-    bool stale_apertium_translation = false;
+    bool obsolete_provider_translation = false;
 
     // 1. Try cache first (fastest)
     if (auto cached = TryGetFromCache(card_code, target_locale)) {
-        if (IsStaleApertiumTranslation(*cached, target_locale)) {
-            stale_apertium_translation = true;
+        if (IsObsoleteApertiumTranslation(*cached)) {
+            obsolete_provider_translation = true;
+        } else if (IsYugipediaMissingTranslation(*cached)) {
+            return true;
         } else {
             cache_hits_++;
             if (!cached->desc.empty()) {
@@ -141,7 +131,7 @@ bool TranslationManager::EnsureCardTranslated(uint32_t card_code, const std::str
     }
     
     // 2. Try locale DB
-    if (!stale_apertium_translation) {
+    if (!obsolete_provider_translation) {
         if (auto from_db = TryGetFromLocaleDB(card_code, target_locale)) {
             if (!from_db->desc.empty()) {
                 cache_->Put(*from_db);
@@ -152,7 +142,7 @@ bool TranslationManager::EnsureCardTranslated(uint32_t card_code, const std::str
     }
     
     // 3. Try YGOPRODeck (if supported)
-    if (config_.ygoprodeck_enabled && ygoprodeck_ && IsYGOPRODeckSupported(target_locale)) {
+    if (ygoprodeck_ && IsYGOPRODeckSupported(target_locale)) {
         if (auto from_api = TryFetchFromYGOPRODeck(card_code, target_locale)) {
             ygoprodeck_calls_++;
             if (!from_api->desc.empty()) {
@@ -166,19 +156,28 @@ bool TranslationManager::EnsureCardTranslated(uint32_t card_code, const std::str
         }
     }
     
-    // 4. Try Apertium (fallback)
-    if (config_.apertium_enabled && apertium_ && IsApertiumSupported(target_locale)) {
-        if (auto translated = TryTranslateWithApertium(card_code, target_locale)) {
-            apertium_calls_++;
+    // 4. Try the community-maintained Yugipedia text when the official API has no description.
+    if (yugipedia_ && IsYugipediaSupported(target_locale)) {
+        if (auto translated = TryTranslateWithYugipedia(card_code, target_locale)) {
+            if (partial_translation) {
+                if (translated->name.empty())
+                    translated->name = partial_translation->name;
+                for (size_t i = 0; i < translated->strs.size(); ++i) {
+                    if (translated->strs[i].empty())
+                        translated->strs[i] = partial_translation->strs[i];
+                }
+            }
             cache_->Put(*translated);
-            SaveToLocaleDB(*translated);
-            translations_done_++;
-            locale_db_writes_++;
+            if (!IsYugipediaMissingTranslation(*translated)) {
+                SaveToLocaleDB(*translated);
+                translations_done_++;
+                locale_db_writes_++;
+            }
             return true;
         }
     }
 
-    if (partial_translation && !stale_apertium_translation) {
+    if (partial_translation && !obsolete_provider_translation) {
         cache_->Put(*partial_translation);
         SaveToLocaleDB(*partial_translation);
         return true;
@@ -198,7 +197,7 @@ std::optional<CardTranslation> TranslationManager::GetTranslation(uint32_t card_
     // Try cache
     const auto cached = TryGetFromCache(card_code, target_locale);
     if (cached) {
-        if (!IsStaleApertiumTranslation(*cached, target_locale))
+        if (!IsObsoleteApertiumTranslation(*cached))
             return cached;
     } else {
         if (auto from_db = TryGetFromLocaleDB(card_code, target_locale))
@@ -218,7 +217,7 @@ bool TranslationManager::ForceTranslateCard(uint32_t card_code, const std::strin
     std::optional<CardTranslation> partial_translation;
     
     // Try YGOPRODeck first
-    if (config_.ygoprodeck_enabled && ygoprodeck_ && IsYGOPRODeckSupported(target_locale)) {
+    if (ygoprodeck_ && IsYGOPRODeckSupported(target_locale)) {
         if (auto from_api = TryFetchFromYGOPRODeck(card_code, target_locale)) {
             if (!from_api->desc.empty()) {
                 cache_->Put(*from_api);
@@ -231,13 +230,17 @@ bool TranslationManager::ForceTranslateCard(uint32_t card_code, const std::strin
         }
     }
     
-    // Fallback to Apertium
-    if (config_.apertium_enabled && apertium_ && IsApertiumSupported(target_locale)) {
-        if (auto translated = TryTranslateWithApertium(card_code, target_locale)) {
+    // Fallback to the community-maintained Yugipedia text.
+    if (yugipedia_ && IsYugipediaSupported(target_locale)) {
+        if (auto translated = TryTranslateWithYugipedia(card_code, target_locale)) {
+            if (partial_translation && translated->name.empty())
+                translated->name = partial_translation->name;
             cache_->Put(*translated);
-            SaveToLocaleDB(*translated);
-            translations_done_++;
-            locale_db_writes_++;
+            if (!IsYugipediaMissingTranslation(*translated)) {
+                SaveToLocaleDB(*translated);
+                translations_done_++;
+                locale_db_writes_++;
+            }
             return true;
         }
     }
@@ -269,15 +272,15 @@ size_t TranslationManager::TranslateCards(const std::vector<uint32_t>& card_code
 }
 
 void TranslationManager::OnCardViewed(uint32_t card_code, const std::string& locale) {
-    if (!IsEnabled() || !translate_on_demand_) return;
+    if (!IsEnabled()) return;
     
     // Queue for background translation if not already cached
     std::string target_locale = locale.empty() ? current_locale_ : locale;
     if (target_locale == "en" || target_locale == "English") return;
     
-    // Queue missing translations and cached entries without a description.
+    // Retry partial results, but keep a negative Yugipedia result cached.
     auto cached = TryGetFromCache(card_code, target_locale);
-    if (!cached || cached->desc.empty()) {
+    if (!cached || (cached->desc.empty() && !IsYugipediaMissingTranslation(*cached))) {
         QueueTranslation(card_code, target_locale);
     }
 }
@@ -403,30 +406,16 @@ std::optional<CardTranslation> TranslationManager::TryFetchFromYGOPRODeck(uint32
     return YGOPRODeckClient::ToCardTranslation(*card_data, locale);
 }
 
-std::optional<CardTranslation> TranslationManager::TryTranslateWithApertium(uint32_t card_code, const std::string& locale) {
-    if (!apertium_) return std::nullopt;
-    
-    CardTranslation en_translation;
-    if (ygoprodeck_) {
-        if (auto en_card = ygoprodeck_->FetchCard(card_code, "en")) {
-            en_translation = YGOPRODeckClient::ToCardTranslation(*en_card, "en");
-        }
+std::optional<CardTranslation> TranslationManager::TryTranslateWithYugipedia(uint32_t card_code, const std::string& locale) {
+    if (!yugipedia_) return std::nullopt;
+    yugipedia_calls_++;
+    std::string card_name;
+    if (gDataManager) {
+        const auto card = gDataManager->cards.find(card_code);
+        if (card != gDataManager->cards.end())
+            card_name = Utils::ToUTF8IfNeeded(card->second._strings.name);
     }
-    if (!en_translation.HasContent() && gDataManager) {
-        en_translation.card_id = card_code;
-        en_translation.locale = "en";
-        en_translation.source = "local_database";
-        en_translation.name = BufferIO::EncodeUTF8(gDataManager->GetName(card_code));
-        en_translation.desc = BufferIO::EncodeUTF8(gDataManager->GetText(card_code));
-    }
-    if (!en_translation.HasContent())
-        return std::nullopt;
-    
-    // Now translate to target locale
-    auto translated = apertium_->TranslateCard(en_translation, locale);
-    if (!translated || (!en_translation.desc.empty() && translated->desc == en_translation.desc))
-        return std::nullopt;
-    return translated;
+    return yugipedia_->FetchTranslation(card_code, locale, card_name);
 }
 
 bool TranslationManager::SaveToLocaleDB(const CardTranslation& translation) {
@@ -557,7 +546,7 @@ TranslationManager::Stats TranslationManager::GetStats() const {
     stats.cache_hits = cache_hits_.load();
     stats.cache_misses = cache_misses_.load();
     stats.ygoprodeck_calls = ygoprodeck_calls_.load();
-    stats.apertium_calls = apertium_calls_.load();
+    stats.yugipedia_calls = yugipedia_calls_.load();
     stats.locale_db_writes = locale_db_writes_.load();
     stats.translations_done = translations_done_.load();
     stats.errors = errors_.load();

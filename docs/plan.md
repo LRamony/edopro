@@ -1,32 +1,28 @@
-# Plano de Implementação: Legendas Automáticas de Cartas (10 Idiomas)
+# Plano de Implementação: Tradução Automática de Cartas
 
 ## Visão Geral
 
 Implementar sistema de tradução automática de cartas do Yu-Gi-Oh no EDOPro que:
 1. **Busca traduções oficiais** da API YGOPRODeck (5 idiomas suportados nativamente)
-2. **Traduz via Apertium** para idiomas cobertos por pares de tradução disponíveis
+2. **Busca traduções comunitárias no Yugipedia** quando a YGOPRODeck não fornece o texto no idioma escolhido
 3. **Armazena em banco locale** (`config/languages/{locale}/cards.cdb`) para performance
 4. **Funciona on-demand** - traduz apenas quando a carta é visualizada
 5. **Cache local** - evita re-traduções e chamadas de API desnecessárias
 
 ---
 
-## Idiomas Alvo (10)
+## Idiomas Disponíveis no Seletor
 
 | Código | Idioma | Fonte Primária | Fallback |
 |--------|--------|----------------|----------|
 | `en` | Inglês | YGOPRODeck (nativo) | - |
-| `pt-BR` | Português Brasil | YGOPRODeck (`pt`) | Apertium `por_BR` (via espanhol) |
-| `fr` | Francês | YGOPRODeck (`fr`) | Apertium (via espanhol/catalão) |
-| `de` | Alemão | YGOPRODeck (`de`) | Sem par Apertium a partir do inglês |
-| `it` | Italiano | YGOPRODeck (`it`) | Apertium (via espanhol/catalão) |
-| `zh-CN` | Chinês Mandarim | - | Sem par Apertium a partir do inglês |
-| `es` | Espanhol | - | Apertium (direto) |
-| `ar` | Árabe | - | Sem par Apertium a partir do inglês |
-| `bn` | Bengali | - | Sem par Apertium a partir do inglês |
-| `ru` | Russo | - | Sem par Apertium a partir do inglês |
+| `pt-BR` | Português Brasil | YGOPRODeck (`pt`) | Yugipedia (`pt_text`) |
+| `fr` | Francês | YGOPRODeck (`fr`) | Yugipedia (`fr_text`) |
+| `de` | Alemão | YGOPRODeck (`de`) | Yugipedia (`de_text`) |
+| `it` | Italiano | YGOPRODeck (`it`) | Yugipedia (`it_text`) |
+| `es` | Espanhol | - | Yugipedia (`es_text`) |
 
-**Nota**: Para o fallback do português brasileiro, o destino do Apertium é `por_BR`; `por` é português europeu e não deve ser usado para o locale `pt-BR`.
+**Nota**: Os idiomas disponíveis no seletor dependem das pastas instaladas em `config/languages`. Os campos localizados do Yugipedia cobrem os cinco idiomas listados acima.
 
 ---
 
@@ -39,7 +35,7 @@ Game::ShowCardInfo()
 TranslationManager (Novo)
   ├── Cache Local (SQLite)
   ├── YGOPRODeck API (5 idiomas)
-  └── Apertium (pares públicos disponíveis)
+  └── Yugipedia MediaWiki API (texto comunitário no idioma selecionado)
          │
          ▼
 Locale Database (cards.cdb)
@@ -81,13 +77,13 @@ CREATE TABLE api_usage (
 - Cache de resposta (2 dias conforme API)
 - Suporta parâmetro `&language={code}`
 
-### 3. ApertiumClient
-**Arquivo**: `gframe/apertium_client.h/cpp`
+### 3. YugipediaClient
+**Arquivo**: `gframe/yugipedia_client.h/cpp`
 
-- HTTP client para a API pública gratuita do Apertium
-- Descobre os pares disponíveis em `/apy/listPairs`
-- Busca rotas de até dois pares entre inglês e o idioma de destino
+- Consulta a MediaWiki API pelo nome original em inglês e valida o passcode, inclusive quando preenchido com zeros à esquerda
+- Lê os campos de nome e texto localizados no idioma selecionado
 - Não requer chave de API
+- Guarda traduções e resultados sem texto naquele idioma no cache local
 
 ### 4. TranslationManager (Orquestrador)
 **Arquivo**: `gframe/translation_manager.h/cpp`
@@ -101,7 +97,7 @@ public:
     // 1. Verifica cache local (SQLite)
     // 2. Se não tem, verifica locale DB (cards.cdb)
     // 3. Se não tem, busca YGOPRODeck (se idioma suportado)
-    // 4. Se não tem, traduz via Apertium quando houver uma rota disponível
+    // 4. Se não tem descrição oficial, busca o texto comunitário no Yugipedia
     // 5. Salva no locale DB e cache
     
     struct Stats { int cached; int api_calls; int translations_done; };
@@ -110,7 +106,7 @@ public:
 private:
     TranslationCache cache;
     YGOPRODeckClient ygoprodeck;
-    ApertiumClient apertium;
+    YugipediaClient yugipedia;
     std::string current_locale;
 };
 ```
@@ -187,8 +183,8 @@ Busca YGOPRODeck (se pt, fr, de, it, en)
   Tem     Não tem
    │         │
    ▼         ▼
-Salva    Apertium
-no DB    (traduz EN→idioma de destino, se houver rota)
+Busca    Yugipedia
+no DB    (texto comunitário no idioma selecionado)
    │         │
    └────┬────┘
         ▼
@@ -225,20 +221,12 @@ bool TranslationManager::SaveToLocaleDB(uint32_t code, const CardTranslation& t)
 
 ## Configuração
 
-A API pública do Apertium não exige chave nem configuração de URL. Na interface, o usuário pode ativar ou desativar o fallback; a disponibilidade de idiomas depende dos pares ativos no serviço.
+A API pública do Yugipedia não exige chave. A tradução automática usa primeiro a YGOPRODeck e consulta o Yugipedia apenas se não houver descrição no idioma ativo.
 
 ```json
 {
   "translation": {
     "enabled": true,
-    "ygoprodeck": {
-      "enabled": true,
-      "rate_limit_per_sec": 20
-    },
-    "apertium": {
-      "enabled": true,
-      "rate_limit_per_min": 60
-    },
     "cache": {
       "max_age_days": 30,
       "max_entries": 50000
@@ -272,7 +260,7 @@ tabSettings.chkAutoTranslate = env->addCheckBox(gGameConfig->auto_translate, Get
 gframe/
 ├── translation_cache.h/cpp
 ├── ygoprodeck_client.h/cpp
-├── apertium_client.h/cpp
+├── yugipedia_client.h/cpp
 ├── translation_manager.h/cpp
 ├── card_translation.h
 ```
@@ -296,7 +284,7 @@ gframe/
 files {
     "gframe/translation_cache.cpp",
     "gframe/ygoprodeck_client.cpp",
-    "gframe/apertium_client.cpp",
+    "gframe/yugipedia_client.cpp",
     "gframe/translation_manager.cpp",
 }
 ```
@@ -312,9 +300,10 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 - Cache local de 2 dias
 - User-Agent: `EDOPro/41.0.0 (Translation System)`
 
-### Apertium
-- API pública sem chave de autenticação
-- Pares e rotas verificados dinamicamente pela API
+### Yugipedia
+- API MediaWiki pública, sem chave de autenticação
+- Um pedido por carta/idioma; traduções encontradas ficam no cache SQLite e no banco local do idioma
+- Resultado sem texto localizado também fica no cache para não repetir pedidos a cada hover
 - Token bucket local
 
 ---
@@ -325,12 +314,12 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 1. Primeira visualização - Carta nunca traduzida → API → DB → UI
 2. Segunda visualização - Carta no cache → Cache → UI (instantâneo)
 3. Troca de idioma - Limpa locale strings, recarrega do novo locale DB
-4. Carta sem tradução oficial - YGOPRODeck falha → Apertium (se houver rota) → DB
+4. Carta sem tradução oficial - YGOPRODeck falha → Yugipedia (se existir texto localizado) → DB
 5. Offline - Usa apenas cache/DB local
 6. Rate limit - Queue com backoff exponencial
 
 ### Métricas de Sucesso
-- Latência 1ª vez: depende do número de pares da rota Apertium
+- Latência 1ª vez: depende da resposta da API Yugipedia
 - Latência cache: < 10ms
 - Taxa de acerto cache: > 90% após 1 hora de uso
 - Zero crashes por falha de tradução
@@ -342,9 +331,9 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 | Risco | Probabilidade | Impacto | Mitigação |
 |-------|---------------|---------|-----------|
 | YGOPRODeck muda API | Média | Alto | Versionamento no client, fallback gracioso |
-| Apertium público indisponível | Baixa | Médio | Preservar fallback para dados locais |
+| Yugipedia público indisponível | Baixa | Médio | Preservar cache e dados locais |
 | Rate limit atingido | Média | Baixo | Queue local + backoff + cache agressivo |
-| Tradução ruim (Apertium) | Média | Baixo | Preservar texto original se a tradução falhar |
+| Tradução comunitária incompleta | Média | Baixo | Preservar texto local quando não houver tradução |
 | DB locale corrompido | Baixa | Alto | Transações SQLite + backup automático |
 | Memória alta (cache) | Baixa | Médio | LRU eviction + limite configurável |
 
@@ -356,7 +345,7 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 |------|--------|-------|
 | 1 | TranslationCache (SQLite) | 2 dias |
 | 2 | YGOPRODeckClient (HTTP + parsing) | 2 dias |
-| 3 | ApertiumClient | 1 dia |
+| 3 | YugipediaClient | 1 dia |
 | 4 | TranslationManager (orquestração) | 2 dias |
 | 5 | Integração Game::ShowCardInfo | 1 dia |
 | 6 | UI Configurações (Cliente → Idioma) | 1 dia |
@@ -389,10 +378,10 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 ## Próximos Passos
 
 1. **Aprovar este plano** ✓
-2. **Usar a API pública do Apertium** (sem chave; disponibilidade depende dos pares ativos)
+2. **Consultar a API pública do Yugipedia** (sem chave; os textos dependem das contribuições da comunidade)
 3. **Implementar Fase 1-2** (Cache + YGOPRODeck)
 4. **Testar com 1 idioma** (pt-BR)
-5. **Expandir para 10 idiomas**
+5. **Verificar os idiomas instalados em `config/languages`**
 6. **Adicionar UI de configuração**
 
 ---
@@ -405,7 +394,7 @@ Links necessários: `curl`, `sqlite3` (já linkados no projeto)
 
 3. **Compatibilidade**: O sistema de locale do EDOPro já suporta múltiplos `cards.cdb` por idioma. Nossa implementação apenas **popula** esses bancos.
 
-4. **Gratuito**: A API pública do Apertium não exige chave; alguns idiomas não possuem rota a partir do inglês.
+4. **Gratuito**: A API pública do Yugipedia não exige chave; algumas cartas podem não ter tradução comunitária em todos os idiomas.
 
 ---
 

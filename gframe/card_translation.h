@@ -10,7 +10,7 @@ namespace ygo {
 struct CardTranslation {
     uint32_t card_id = 0;
     std::string locale;
-    std::string source;  // "ygoprodeck", "apertium", "manual"
+    std::string source;  // "ygoprodeck", "yugipedia", "manual"
     
     std::string name;
     std::string desc;
@@ -33,23 +33,23 @@ struct CardTranslation {
 struct LanguageInfo {
     std::string locale_code;      // EDOPro locale (e.g., "pt-BR")
     std::string ygoprodeck_code;  // YGOPRODeck API code (e.g., "pt") - empty if not supported
-    std::string apertium_code;  // Apertium language code (e.g., "por_BR")
+    std::string yugipedia_code;   // Yugipedia card-template language code (e.g., "pt")
     std::string display_name;     // UI display name
 };
 
 // Returns all 10 supported languages
 inline const std::array<LanguageInfo, 10>& GetSupportedLanguages() {
     static const std::array<LanguageInfo, 10> languages = {{
-        {"en", "en", "eng", "English"},
-        {"pt-BR", "pt", "por_BR", "Português Brasil"},
-        {"fr", "fr", "fra", "Français"},
-        {"de", "de", "deu", "Deutsch"},
-        {"it", "it", "ita", "Italiano"},
-        {"zh-CN", "", "zho", "中文 (简体)"},
-        {"es", "", "spa", "Español"},
-        {"ar", "", "ara", "العربية"},
-        {"bn", "", "ben", "বাংলা"},
-        {"ru", "", "rus", "Русский"},
+        {"en", "en", "", "English"},
+        {"pt-BR", "pt", "pt", u8"Portugu\u00eas Brasil"},
+        {"fr", "fr", "fr", u8"Fran\u00e7ais"},
+        {"de", "de", "de", "Deutsch"},
+        {"it", "it", "it", "Italiano"},
+        {"zh-CN", "", "", "中文 (简体)"},
+        {"es", "", "es", u8"Espa\u00f1ol"},
+        {"ar", "", "", "العربية"},
+        {"bn", "", "", "বাংলা"},
+        {"ru", "", "", "Русский"},
     }};
     return languages;
 }
@@ -59,7 +59,7 @@ inline const LanguageInfo* FindLanguage(const std::string& locale) {
     for (const auto& lang : GetSupportedLanguages()) {
         if (lang.locale_code == locale || lang.display_name == locale) return &lang;
     }
-    if (locale == "Português") return &GetSupportedLanguages()[1];
+    if (locale == u8"Portugu\u00eas") return &GetSupportedLanguages()[1];
     return nullptr;
 }
 
@@ -69,10 +69,10 @@ inline bool IsYGOPRODeckSupported(const std::string& locale) {
     return lang && !lang->ygoprodeck_code.empty();
 }
 
-// Check if locale has an Apertium language code
-inline bool IsApertiumSupported(const std::string& locale) {
+// Check if locale has a Yugipedia language code
+inline bool IsYugipediaSupported(const std::string& locale) {
     auto* lang = FindLanguage(locale);
-    return lang && !lang->apertium_code.empty();
+    return lang && !lang->yugipedia_code.empty();
 }
 
 // Get YGOPRODeck language code for locale
@@ -81,10 +81,10 @@ inline std::string GetYGOPRODeckCode(const std::string& locale) {
     return lang ? lang->ygoprodeck_code : "";
 }
 
-// Get Apertium language code for locale
-inline std::string GetApertiumCode(const std::string& locale) {
+// Get Yugipedia language code for locale
+inline std::string GetYugipediaCode(const std::string& locale) {
     auto* lang = FindLanguage(locale);
-    return lang ? lang->apertium_code : "";
+    return lang ? lang->yugipedia_code : "";
 }
 
 } // namespace ygo

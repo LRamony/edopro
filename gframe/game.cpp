@@ -1673,7 +1673,11 @@ void Game::PopulateSettingsWindow() {
 			auto selectedLocale = gSettings.cbCurrentLocale->addItem(L"English");
 			for(const auto& _locale : locales) {
 				auto& locale = _locale.first;
-				auto itemIndex = gSettings.cbCurrentLocale->addItem(Utils::ToUnicodeIfNeeded(locale).data());
+				const auto localeName = Utils::ToUTF8IfNeeded(locale);
+				auto displayName = localeName;
+				if(localeName == u8"Portugu\u00eas")
+					displayName = u8"Portugu\u00eas (Brasil)";
+				auto itemIndex = gSettings.cbCurrentLocale->addItem(Utils::ToUnicodeIfNeeded(displayName).data());
 				if(gGameConfig->locale == locale) {
 					selectedLocale = itemIndex;
 				}
@@ -1684,19 +1688,10 @@ void Game::PopulateSettingsWindow() {
 		
 		// Translation settings
 		{
-			gSettings.stTranslation = env->addStaticText(L"Tradução Automática de Cartas:", GetCurrentRectWithXOffset(15, 90), false, true, sPanel);
+			gSettings.stTranslation = env->addStaticText(L"Tradu\u00e7\u00e3o Autom\u00e1tica de Cartas:", GetCurrentRectWithXOffset(15, 90), false, true, sPanel);
 			IncrementXorY();
-			gSettings.chkTranslationEnabled = env->addCheckBox(gGameConfig->translation_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_ENABLED, L"Ativar tradução automática");
+			gSettings.chkTranslationEnabled = env->addCheckBox(gGameConfig->translation_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_ENABLED, L"Ativar tradu\u00e7\u00e3o autom\u00e1tica");
 			menuHandler.MakeElementSynchronized(gSettings.chkTranslationEnabled);
-			IncrementXorY();
-			gSettings.chkTranslationYGOPRODeck = env->addCheckBox(gGameConfig->translation_ygoprodeck_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_YGOPRODECK, L"Usar YGOPRODeck API (oficial)");
-			menuHandler.MakeElementSynchronized(gSettings.chkTranslationYGOPRODeck);
-			IncrementXorY();
-			gSettings.chkTranslationApertium = env->addCheckBox(gGameConfig->translation_apertium_enabled, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_APERTIUM, L"Usar Apertium (fallback)");
-			menuHandler.MakeElementSynchronized(gSettings.chkTranslationApertium);
-			IncrementXorY();
-			gSettings.chkTranslationOnDemand = env->addCheckBox(gGameConfig->translation_on_demand, GetNextRect(), sPanel, CHECKBOX_TRANSLATION_ON_DEMAND, L"Traduzir sob demanda (ao visualizar carta)");
-			menuHandler.MakeElementSynchronized(gSettings.chkTranslationOnDemand);
 			IncrementXorY();
 		}
 		
@@ -2937,7 +2932,7 @@ void Game::ShowCardInfo(uint32_t code, bool resize, imgType type, bool forcePers
 		translationCode = cd->alias;
 	if(gTranslationManager && cd && !translationLocale.empty() && translationLocale != "en" && translationLocale != "English") {
 		cardTranslation = gTranslationManager->GetTranslation(translationCode, translationLocale);
-		if((!cardTranslation || cardTranslation->desc.empty()) && gTranslationManager->IsTranslateOnDemand())
+		if(!cardTranslation || cardTranslation->desc.empty())
 			gTranslationManager->OnCardViewed(translationCode, translationLocale);
 	}
 	if(showingcard == code && !forcePersistent) {

@@ -4,7 +4,7 @@
 #include "card_translation.h"
 #include "translation_cache.h"
 #include "ygoprodeck_client.h"
-#include "apertium_client.h"
+#include "yugipedia_client.h"
 #include "data_manager.h"
 #include <string>
 #include <memory>
@@ -25,20 +25,16 @@ public:
         std::string locale = "pt-BR";
         std::string locale_db_path = "./config/languages/";
         
-        // YGOPRODeck settings
-        bool ygoprodeck_enabled = true;
         int ygoprodeck_rate_limit = 20;
         
-        // Apertium settings
-        bool apertium_enabled = true;
-        int apertium_rate_limit_per_min = 60;
+        // Yugipedia settings
+        int yugipedia_rate_limit_per_min = 60;
         
         // Cache settings
         int cache_max_age_days = 30;
         size_t cache_max_entries = 50000;
         
         // Behavior
-        bool translate_on_demand = true;      // Translate when card is viewed
         bool preload_popular = false;         // Preload popular cards
         bool fallback_to_english = true;      // Show English if translation fails
     };
@@ -47,7 +43,7 @@ public:
         size_t cache_hits = 0;
         size_t cache_misses = 0;
         size_t ygoprodeck_calls = 0;
-        size_t apertium_calls = 0;
+        size_t yugipedia_calls = 0;
         size_t locale_db_writes = 0;
         size_t translations_done = 0;
         size_t errors = 0;
@@ -86,9 +82,6 @@ public:
     // Check if translation is enabled
     bool IsEnabled() const;
     void SetEnabled(bool enabled);
-    bool IsTranslateOnDemand() const;
-    void SetTranslateOnDemand(bool enabled);
-    
     // Save locale strings (strings.conf) for current locale
     bool SaveLocaleStrings(const std::string& locale = "");
     
@@ -100,11 +93,10 @@ private:
     Config config_;
     mutable std::mutex mutex_;
     std::atomic<bool> initialized_{false};
-    std::atomic<bool> translate_on_demand_{true};
     std::atomic<std::size_t> cache_hits_{0};
     std::atomic<std::size_t> cache_misses_{0};
     std::atomic<std::size_t> ygoprodeck_calls_{0};
-    std::atomic<std::size_t> apertium_calls_{0};
+    std::atomic<std::size_t> yugipedia_calls_{0};
     std::atomic<std::size_t> locale_db_writes_{0};
     std::atomic<std::size_t> translations_done_{0};
     std::atomic<std::size_t> errors_{0};
@@ -112,7 +104,7 @@ private:
     // Components
     std::unique_ptr<TranslationCache> cache_;
     std::unique_ptr<YGOPRODeckClient> ygoprodeck_;
-    std::unique_ptr<ApertiumClient> apertium_;
+    std::unique_ptr<YugipediaClient> yugipedia_;
     
     // Current locale
     std::string current_locale_;
@@ -129,7 +121,7 @@ private:
     std::optional<CardTranslation> TryGetFromCache(uint32_t card_code, const std::string& locale);
     std::optional<CardTranslation> TryGetFromLocaleDB(uint32_t card_code, const std::string& locale);
     std::optional<CardTranslation> TryFetchFromYGOPRODeck(uint32_t card_code, const std::string& locale);
-    std::optional<CardTranslation> TryTranslateWithApertium(uint32_t card_code, const std::string& locale);
+    std::optional<CardTranslation> TryTranslateWithYugipedia(uint32_t card_code, const std::string& locale);
     bool SaveToLocaleDB(const CardTranslation& translation);
     bool EnsureLocaleDBExists(const std::string& locale);
     

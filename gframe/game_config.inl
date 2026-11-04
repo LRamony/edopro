@@ -125,7 +125,4 @@ OPTION(float, replaySpeed, 1.0f)
 
 // Translation system options
 OPTION(bool, translation_enabled, true)
-OPTION(bool, translation_ygoprodeck_enabled, true)
-OPTION_ALIASED(bool, translation_apertium_enabled, translation_libretranslate_enabled, true)
-OPTION(bool, translation_on_demand, true)
 OPTION(int, translation_cache_max_age_days, 30)

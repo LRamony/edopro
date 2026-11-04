@@ -170,9 +170,6 @@ DataHandler::DataHandler() {
 	TranslationManager::Config trans_config;
 	trans_config.locale = Utils::ToUTF8IfNeeded(configs->locale);
 	trans_config.enabled = configs->translation_enabled;
-	trans_config.ygoprodeck_enabled = configs->translation_ygoprodeck_enabled;
-	trans_config.apertium_enabled = configs->translation_apertium_enabled;
-	trans_config.translate_on_demand = configs->translation_on_demand;
 	trans_config.cache_max_age_days = configs->translation_cache_max_age_days;
 	gTranslationManager->Initialize(trans_config);
 	
